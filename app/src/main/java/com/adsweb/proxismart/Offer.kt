@@ -11,20 +11,19 @@ data class LocalProfile(
     val role: String = "",
     val name: String = "",
     val email: String = "",
-    val address: String = "",
+    val interests: String = "",
     val category: String = "",
     val subCategory: String = "",
     val lat: Double = 0.0,
     val lng: Double = 0.0,
-    val isPremium: Boolean = false,
-    val premiumToken: String = ""
+    val isPremium: Boolean = false
 )
 
 @Entity(tableName = "offers")
 data class Offer(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val storeName: String = "",
-    val storeLogo: String = "",
+    val storeLogo: String = "", // <--- ESTO ARREGLA TU ERROR
     val title: String = "",
     val price: String = "",
     val category: String = "",
