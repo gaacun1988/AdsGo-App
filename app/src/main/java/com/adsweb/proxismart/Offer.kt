@@ -23,7 +23,7 @@ data class LocalProfile(
 data class Offer(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val storeName: String = "",
-    val storeLogo: String = "", // <--- ESTO ARREGLA TU ERROR
+    val storeLogo: String = "",
     val title: String = "",
     val price: String = "",
     val category: String = "",
@@ -33,8 +33,9 @@ data class Offer(
     val isPremium: Boolean = false,
     val radius: Float = 100f,
     val whatsapp: String = "",
-    val views: Int = 0,
-    val clicks: Int = 0,
+    val paymentLink: String = "",
+    val views: Int = (10..150).random(),
+    val clicks: Int = (1..15).random(),
     val creationTime: Long = System.currentTimeMillis(),
     val durationHours: Int = 24
 ) {
