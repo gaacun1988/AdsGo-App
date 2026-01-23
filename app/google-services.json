@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "165195142003",
+    "project_id": "proxismart-adsweb",
+    "storage_bucket": "proxismart-adsweb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:165195142003:android:ab541a181d29509ca4ab06",
+        "android_client_info": {
+          "package_name": "com.adsweb.proxismart"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpENPrlUgOkHbwhDFF9xhUrg2-RXNzVq0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
