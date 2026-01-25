@@ -24,6 +24,7 @@ data class LocalProfile(
 data class Offer(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val storeName: String = "",
+    val storeLogo: String = "",
     val title: String = "",
     val price: String = "",
     val category: String = "",
@@ -31,9 +32,11 @@ data class Offer(
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
     val isPremium: Boolean = false,
+    val radius: Float = 100f,
     val whatsapp: String = "",
-    val views: Int = (20..200).random(),
-    val clicks: Int = (5..30).random(),
+    val paymentLink: String = "",
+    val views: Int = (10..150).random(),
+    val clicks: Int = (1..15).random(),
     val creationTime: Long = System.currentTimeMillis(),
     val durationHours: Int = 24
 ) {
