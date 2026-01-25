@@ -19,8 +19,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adsweb.proxismart.ui.theme.*
-import com.google.android.gms.maps.model.*
-import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
 
 @Composable
@@ -29,103 +27,126 @@ fun StoreScreen(profile: LocalProfile, onBack: () -> Unit) {
     val db = remember { AppDatabase.getDatabase(context) }
     val scope = rememberCoroutineScope()
 
-    // --- ESTADOS DE NAVEGACIÓN INTERNA (Flujo PDF / Rappi Style) ---
-    var subScreen by remember { mutableStateOf("home") }
-    var selectedCategory by remember { mutableStateOf("") }
-    var selectedAd by remember { mutableStateOf<Offer?>(null) }
+    // --- SISTEMA DE VENTANAS ADSGO (FLUJO TIPO RAPPI) ---
+    var currentSubScreen by remember { mutableStateOf("home") }
+    var selectedRubro by remember { mutableStateOf("") }
+    var selectedSubRubro by remember { mutableStateOf("") }
+    var selectedAdForDetail by remember { mutableStateOf<Offer?>(null) }
 
-    // --- LAS 20 CATEGORÍAS PROFESIONALES DEL FEEDBACK ---
+    // --- MAPA MAESTRO DE 20 CATEGORÍAS SEGÚN EL PDF ---
     val categoryMap = mapOf(
-        "Restaurante" to listOf("Vegano", "Pastas", "Pescados", "Carnes", "Sabores Argentinos", "Bodega", "Sushi"),
-        "Verduleria" to listOf("Frutas de Estación", "Verduras", "Orgánicos", "Frutos Secos"),
-        "Ferretería" to listOf("Pinturas", "Herramientas", "Electricidad", "Plomería", "Cerrajería"),
-        "Kiosco" to listOf("Maxikiosco", "Bebidas", "Tabaco", "Golosinas"),
-        "Comercio Gral" to listOf("Bazar", "Limpieza", "Librería", "Regalería"),
-        "Farmacia" to listOf("Medicamentos", "Perfumería", "Cuidado Bebé"),
-        "Ropa" to listOf("Hombre", "Mujer", "Niños", "Accesorios"),
-        "Calzado" to listOf("Deportivo", "Casual", "Fiesta"),
-        "Electrónica" to listOf("Celulares", "Gaming", "Computación", "Cámaras"),
-        "Mascotas" to listOf("Alimento", "Accesorios", "Clínica Veterinaria"),
-        "Gimnasio" to listOf("Funcional", "Crossfit", "Musculación", "Boxeo"),
-        "Peluquería" to listOf("Barbería", "Color y Corte", "Manicura"),
-        "Panadería" to listOf("Facturas/Masas", "Pan Galletas", "Pastas Frescas"),
-        "Joyería" to listOf("Relojería", "Plata", "Joyas de Diseño"),
-        "Florería" to listOf("Ramos Preparados", "Plantas", "Servicio Eventos"),
-        "Deportes" to listOf("Fútbol", "Padel", "Tennis", "Suplementos"),
-        "Cafetería" to listOf("De Especialidad", "Patisserie", "Brunch"),
-        "Carnicería" to listOf("Vacunos", "Granja", "Embutidos"),
-        "Supermercado" to listOf("Mayorista", "Market Express"),
-        "Automotor" to listOf("Lubricentro", "Repuestos", "Accesorios Vehículo")
+        "Verduleria" to listOf("Frutas de estación", "Vegetales", "Orgánico", "Frutos Secos"),
+        "Restaurante" to listOf("Vegano", "Pastas", "Pescados", "Sabores Argentinos", "Sushi", "Minutas"),
+        "Kiosco" to listOf("Golosinas", "Bebidas Frías", "MaxiKiosco", "Regalería"),
+        "Ferreteria" to listOf("Herramientas Hogar", "Pintura", "Electricidad", "Plomería"),
+        "Panaderia" to listOf("Facturas", "Panes Artesanales", "Masas", "Tortas"),
+        "Farmacia" to listOf("Recetados", "Cosmética", "Higiene", "Primeros Auxilios"),
+        "Ropa" to listOf("Masculina", "Femenina", "Infantil", "Accesorios"),
+        "Calzado" to listOf("Deportivo", "Urbano", "Gala", "Zapatillas"),
+        "Electronica" to listOf("Celulares", "Gaming", "Audio", "Smart Home"),
+        "Supermercado" to listOf("Almacén", "Limpieza", "Fiambrería", "Ofertas Góndola"),
+        "Jugueteria" to listOf("Didácticos", "Juegos de Mesa", "Peluches", "Action Figures"),
+        "Mascotas" to listOf("Alimento Perros/Gatos", "Peluquería", "Accesorios"),
+        "Gimnasio" to listOf("Crossfit", "Yoga", "Musculación", "Funcional"),
+        "Peluqueria" to listOf("Barbería", "Coloristas", "Tratamientos"),
+        "Libreria" to listOf("Escolar", "Técnica", "Arte y Dibujo", "Novedades"),
+        "Joyeria" to listOf("Relojes Pro", "Platería", "Oro", "Joyas Diseño"),
+        "Floreria" to listOf("Ramos para Regalo", "Plantas Interior", "Eventos"),
+        "Deportes" to listOf("Futbol/Basket", "Tenis/Padel", "Suplementos"),
+        "Cafeteria" to listOf("Café de especialidad", "Brunch", "Desayunos"),
+        "Carniceria" to listOf("Cortes Vacunos", "Granja/Pollo", "Cerdo", "Chacinados")
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        when (subScreen) {
-            "home" -> StoreHomeView(
+        when (currentSubScreen) {
+            "home" -> StoreMainHome(
+                profile = profile,
                 db = db,
-                onNewAd = { subScreen = "cats" },
-                onViewDetail = { ad -> selectedAd = ad; subScreen = "detail" },
-                onGoPremium = { subScreen = "pay" }
+                onNewAd = { currentSubScreen = "select_rubro" },
+                onViewDetail = { ad -> selectedAdForDetail = ad; currentSubScreen = "stats" },
+                onUpgradePremium = { currentSubScreen = "premium_tunnel" }
             )
-            "cats" -> RubroWindow(
-                map = categoryMap,
-                onBack = { subScreen = "home" },
-                onComplete = { cat, sub ->
+
+            "select_rubro" -> GenericListSelectionWindow(
+                title = "1. Seleccione Rubro",
+                items = categoryMap.keys.toList(),
+                onBack = { currentSubScreen = "home" },
+                onSelect = { selectedRubro = it; currentSubScreen = "select_subrubro" }
+            )
+
+            "select_subrubro" -> GenericListSelectionWindow(
+                title = "2. $selectedRubro - Tipo",
+                items = categoryMap[selectedRubro] ?: emptyList(),
+                onBack = { currentSubScreen = "select_rubro" },
+                onSelect = { selectedSubRubro = it; currentSubScreen = "publish_form" }
+            )
+
+            "publish_form" -> AdsGoPublishForm(
+                profile = profile,
+                rubro = selectedRubro,
+                subRubro = selectedSubRubro,
+                onBack = { currentSubScreen = "select_subrubro" },
+                onComplete = { newOffer ->
                     scope.launch {
-                        val ad = Offer(
-                            storeName = profile.name,
-                            title = "Promo en $sub",
-                            price = "Consultar en el Local",
-                            category = cat,
-                            subCategory = sub,
-                            latitude = profile.lat,
-                            longitude = profile.lng,
-                            isPremium = profile.isPremium,
-                            whatsapp = profile.email
-                        )
-                        db.offerDao().insertOffer(ad)
-                        subScreen = "home"
-                        Toast.makeText(context, "ADSGO: Publicación Lanzada con Éxito", Toast.LENGTH_SHORT).show()
+                        db.offerDao().insertOffer(newOffer)
+                        currentSubScreen = "home"
+                        Toast.makeText(context, "Anuncio Lanzado a ${newOffer.radius}m!", Toast.LENGTH_SHORT).show()
                     }
                 }
             )
-            "pay" -> PremiumTunnelWindow(
-                onBack = { subScreen = "home" },
-                onDone = { subScreen = "home" }
+
+            "stats" -> AdMetricsDeepWindow(
+                offer = selectedAdForDetail,
+                onBack = { currentSubScreen = "home" },
+                onDelete = {
+                    scope.launch { /* Lógica de borrado */ }
+                    currentSubScreen = "home"
+                }
             )
-            "detail" -> AdMetricsWindow(
-                ad = selectedAd,
-                onBack = { subScreen = "home" }
+
+            "premium_tunnel" -> PremiumPayTunnelWindow(
+                onBack = { currentSubScreen = "home" },
+                onSuccess = { currentSubScreen = "home" }
             )
         }
     }
 }
 
+// --- VENTANA 1: HOME DE LA TIENDA ---
 @Composable
-fun StoreHomeView(db: AppDatabase, onNewAd: () -> Unit, onViewDetail: (Offer) -> Unit, onGoPremium: () -> Unit) {
-    var list by remember { mutableStateOf(emptyList<Offer>()) }
-    LaunchedEffect(Unit) { list = db.offerDao().getAllOffers() }
+fun StoreMainHome(profile: LocalProfile, db: AppDatabase, onNewAd: () -> Unit, onViewDetail: (Offer) -> Unit, onUpgradePremium: () -> Unit) {
+    var myAds by remember { mutableStateOf<List<Offer>>(emptyList()) }
+    LaunchedEffect(Unit) { myAds = db.offerDao().getAllOffers() }
 
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = DeepBlueAds) {
-                NavigationBarItem(selected = true, onClick = {}, icon = { Icon(Icons.Default.Dashboard, null, tint = Color.White) }, label = { Text("Muro Ads") })
-                NavigationBarItem(selected = false, onClick = onGoPremium, icon = { Icon(Icons.Default.Verified, null, tint = Color.LightGray) }, label = { Text("Plus Pro") })
+                NavigationBarItem(selected = true, onClick = {}, icon = { Icon(Icons.Default.Storefront, null, tint = Color.White) }, label = { Text("Muro Ads") })
+                NavigationBarItem(selected = false, onClick = onUpgradePremium, icon = { Icon(Icons.Default.Verified, null, tint = Color.White.copy(0.6f)) }, label = { Text("Hazte PRO") })
             }
         }
     ) { p ->
-        Column(Modifier.padding(p).padding(16.dp)) {
-            Button(onClick = onNewAd, Modifier.fillMaxWidth().height(60.dp), colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)) {
+        Column(modifier = Modifier.padding(p).padding(16.dp)) {
+            Text("Centro de Control: ${profile.name}", fontSize = 18.sp, color = DeepBlueAds, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = onNewAd,
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
+            ) {
+                Icon(Icons.Default.Campaign, null)
+                Spacer(Modifier.width(8.dp))
                 Text("PUBLICAR OFERTA AHORA", fontWeight = FontWeight.Black)
             }
-            Spacer(Modifier.height(24.dp))
-            Text("CAMPAÑAS ACTIVAS (VIGENCIA PDF)", fontWeight = FontWeight.Bold, color = Color.Gray)
-            LazyColumn {
-                items(list) { ad ->
-                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onViewDetail(ad) }) {
+            Spacer(Modifier.height(20.dp))
+            Text("TUS CAMPAÑAS ACTIVAS", fontSize = 14.sp, fontWeight = FontWeight.Black)
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(myAds) { ad ->
+                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable { onViewDetail(ad) }, elevation = CardDefaults.cardElevation(4.dp)) {
                         ListItem(
                             headlineContent = { Text(ad.title, fontWeight = FontWeight.Bold) },
-                            supportingContent = { Text("${ad.subCategory} • Vence: ${ad.getExpirationDate()}") },
-                            trailingContent = { Icon(Icons.Default.QueryStats, null, tint = OrangeAds) }
+                            supportingContent = { Text("Vence: ${ad.getExpirationDate()} - ${ad.subCategory}") },
+                            trailingContent = { Icon(Icons.Default.BarChart, null, tint = OrangeAds) }
                         )
                     }
                 }
@@ -134,26 +155,18 @@ fun StoreHomeView(db: AppDatabase, onNewAd: () -> Unit, onViewDetail: (Offer) ->
     }
 }
 
+// --- VENTANA 2: SELECTORES GENÉRICOS (RUBROS Y SUBRUBROS) ---
 @Composable
-fun RubroWindow(map: Map<String, List<String>>, onBack: () -> Unit, onComplete: (String, String) -> Unit) {
-    var step by remember { mutableIntStateOf(1) }
-    var selCat by remember { mutableStateOf("") }
-
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
+fun GenericListSelectionWindow(title: String, items: List<String>, onBack: () -> Unit, onSelect: (String) -> Unit) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = if(step == 1) onBack else {{ step = 1 }}) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
-            }
-            Text(if(step == 1) "Selecciona tu Rubro" else "Elegir Especialidad", fontSize = 20.sp, fontWeight = FontWeight.Black)
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
+            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Black, color = DeepBlueAds)
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
         LazyColumn {
-            val currentList = if(step == 1) map.keys.toList() else map[selCat] ?: emptyList()
-            items(currentList) { item ->
-                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
-                    if(step == 1) { selCat = item; step = 2 }
-                    else { onComplete(selCat, item) }
-                }) {
+            items(items) { item ->
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onSelect(item) }) {
                     ListItem(headlineContent = { Text(item) }, trailingContent = { Icon(Icons.Default.ChevronRight, null) })
                 }
             }
@@ -161,57 +174,97 @@ fun RubroWindow(map: Map<String, List<String>>, onBack: () -> Unit, onComplete: 
     }
 }
 
+// --- VENTANA 3: FORMULARIO DE PUBLICACIÓN ADSGO ---
 @Composable
-fun AdMetricsWindow(ad: Offer?, onBack: () -> Unit) {
-    if (ad == null) return
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
+fun AdsGoPublishForm(profile: LocalProfile, rubro: String, subRubro: String, onBack: () -> Unit, onComplete: (Offer) -> Unit) {
+    var offerTitle by remember { mutableStateOf("") }
+    var offerPrice by remember { mutableStateOf("") }
+    var whatsapp by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())) {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-        Text("CONVERSIÓN ADSGO", fontWeight = FontWeight.Black, fontSize = 24.sp, color = DeepBlueAds)
+        Text("DETALLE DE TU ADSGO", fontSize = 24.sp, fontWeight = FontWeight.Black, color = OrangeAds)
+        Text("Se publicará en $rubro / $subRubro", color = Color.Gray)
+
         Spacer(Modifier.height(20.dp))
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = DeepBlueAds)) {
+        OutlinedTextField(value = offerTitle, onValueChange = { offerTitle = it }, label = { Text("Título de la Oferta") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = offerPrice, onValueChange = { offerPrice = it }, label = { Text("Precio Final $") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = whatsapp, onValueChange = { whatsapp = it }, label = { Text("Tu WhatsApp de ventas") }, modifier = Modifier.fillMaxWidth())
+
+        Card(modifier = Modifier.fillMaxWidth().padding(top = 20.dp), colors = CardDefaults.cardColors(containerColor = if(profile.isPremium) Color(0xFFE3F2FD) else Color(0xFFF5F5F5))) {
+            Column(Modifier.padding(16.dp)) {
+                Text(if(profile.isPremium) "Satus: PREMIUM PRO" else "Status: PLAN BASE", fontWeight = FontWeight.Bold)
+                Text(if(profile.isPremium) "• Alcance: 300m\n• Tiempo: 7 días" else "• Alcance: 100m\n• Tiempo: 24h", fontSize = 12.sp)
+            }
+        }
+
+        Button(
+            onClick = {
+                onComplete(Offer(
+                    storeName = profile.name,
+                    title = offerTitle,
+                    price = offerPrice,
+                    whatsapp = whatsapp,
+                    category = rubro,
+                    subCategory = subRubro,
+                    latitude = profile.lat,
+                    longitude = profile.lng,
+                    isPremium = profile.isPremium,
+                    radius = if(profile.isPremium) 300f else 100f
+                ))
+            },
+            modifier = Modifier.fillMaxWidth().padding(top = 30.dp).height(60.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
+        ) { Text("LANZAR NOTIFICACIÓN", fontWeight = FontWeight.Black) }
+    }
+}
+
+// --- VENTANA 4: MÉTRICAS Y EDICIÓN ---
+@Composable
+fun AdMetricsDeepWindow(offer: Offer?, onBack: () -> Unit, onDelete: () -> Unit) {
+    if (offer == null) return
+    Column(Modifier.fillMaxSize().padding(24.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
+            Text("DETALLE DE RENDIMIENTO", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(30.dp))
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = DeepBlueAds)) {
             Column(Modifier.padding(24.dp)) {
-                Text("ANUNCIO ID: #ADS-${ad.id}", color = Color.White.copy(alpha = 0.6f))
-                Text(ad.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(24.dp))
-                Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
-                    MetricDetail("Vistas", ad.views.toString())
-                    MetricDetail("Pedidos WA", ad.clicks.toString())
+                Text(offer.title, fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Black)
+                Text("Anuncio ID: #ADS-${offer.id}", color = Color.White.copy(0.6f))
+                Spacer(Modifier.height(40.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("${offer.views}", color = OrangeAds, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                        Text("Vistas", color = Color.White, fontSize = 12.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("${offer.clicks}", color = OrangeAds, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                        Text("Ventas WA", color = Color.White, fontSize = 12.sp)
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun MetricDetail(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 34.sp, color = OrangeAds, fontWeight = FontWeight.Black)
-        Text(label, color = Color.White, fontSize = 10.sp)
-    }
-}
-
-@Composable
-fun PremiumTunnelWindow(onBack: () -> Unit, onDone: () -> Unit) {
-    val context = LocalContext.current
-    var loading by remember { mutableStateOf(false) }
-
-    Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        if (loading) {
-            CircularProgressIndicator(color = OrangeAds)
-            Text("Procesando suscripción ADSGO Pro...", Modifier.padding(top = 16.dp))
-        } else {
-            Icon(Icons.Default.WorkspacePremium, null, Modifier.size(100.dp), tint = OrangeAds)
-            Text("MODO PREMIUM", fontSize = 28.sp, fontWeight = FontWeight.Black, color = DeepBlueAds)
-            Text("Desbloquea 300m de alcance y métricas en tiempo real.", textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(8.dp))
-            Spacer(Modifier.height(40.dp))
-            Button(onClick = {
-                loading = true
-                Toast.makeText(context, "ID de acceso Premium enviado a tu correo.", Toast.LENGTH_LONG).show()
-                onDone()
-            }, Modifier.fillMaxWidth().height(60.dp)) {
-                Text("ADQUIRIR LICENCIA")
-            }
-            TextButton(onClick = onBack) { Text("Ahora no, prefiero Plan Base") }
+        OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth().padding(top = 40.dp), border = BorderStroke(1.dp, Color.Red)) {
+            Text("DAR DE BAJA PUBLICACIÓN", color = Color.Red)
         }
+    }
+}
+
+// --- VENTANA 5: TÚNEL DE PAGO PREMIUM ---
+@Composable
+fun PremiumPayTunnelWindow(onBack: () -> Unit, onSuccess: (String) -> Unit) {
+    Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(Icons.Default.Stars, null, Modifier.size(100.dp), tint = OrangeAds)
+        Text("ADSGO PRO+", fontSize = 30.sp, fontWeight = FontWeight.Black, color = DeepBlueAds)
+        Text("Llega antes que tu competencia", modifier = Modifier.padding(16.dp))
+        Card(Modifier.fillMaxWidth()) {
+            Text("Membresía Mensual: $14.99", modifier = Modifier.padding(16.dp), fontWeight = FontWeight.Bold)
+        }
+        Button(onClick = { onSuccess("ADS-TOKEN-GOLD") }, modifier = Modifier.padding(top = 40.dp).fillMaxWidth().height(60.dp)) {
+            Text("VINCULAR TARJETA Y ACTIVAR")
+        }
+        TextButton(onClick = onBack) { Text("Cancelar") }
     }
 }

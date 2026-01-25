@@ -34,44 +34,45 @@ android {
 }
 
 dependencies {
+    // Core & Background
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.work.runtime)
 
-    // Compose con nombres corregidos
+    // UI AdsGo Engine
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.ui.graphics)
-    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.graphics)
     implementation(libs.compose.material3)
-    implementation(libs.compose.icons.extended)
     implementation(libs.compose.foundation)
-    implementation(libs.compose.foundation.layout)
+    implementation(libs.compose.layout)
+    implementation(libs.compose.tooling.preview)
+    implementation(libs.compose.icons.extended)
 
-    // ADSGO Core
-    implementation(libs.google.play.services.location)
+    // Maps & Proximity
     implementation(libs.play.services.maps)
-    implementation(libs.maps.compose)
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    kapt(libs.androidx.room.compiler)
+    implementation(libs.play.services.location)
+    implementation(libs.google.maps.compose)
+
+    // Database (Offline-First)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    kapt(libs.room.compiler)
+
+    // Backend, SaaS & Network
     implementation(libs.firebase.firestore)
-    implementation(libs.coil.compose)
-    implementation(libs.supabase.postgrest)
-    implementation(libs.ktor.client.android)
-    // Comunicador de Red (Ktor)
-    implementation("io.ktor:ktor-client-android:2.3.11")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.11")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.11")
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
-    // ADSGO Vision (CámaraX)
-    implementation(libs.camera.core)
-    implementation(libs.camera.camera2)
-    implementation(libs.camera.lifecycle)
-    implementation(libs.camera.view)
+    implementation(libs.ktor.android)
+    implementation(libs.ktor.json)
+    implementation(libs.ktor.negotiation)
+    implementation(libs.coil.kt)
     implementation(libs.guava.android)
 
-    // Debug y Test
-    debugImplementation(libs.compose.ui.tooling)
-    debugImplementation(libs.compose.ui.test.manifest)
+    // AR Camera Vision
+    implementation(libs.camera.core)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+
+    debugImplementation(libs.compose.tooling.debug)
+    debugImplementation(libs.compose.test.manifest)
 }

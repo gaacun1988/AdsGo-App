@@ -1,12 +1,10 @@
 package com.adsweb.proxismart
 
-import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,8 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.*
 import com.adsweb.proxismart.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -33,74 +30,71 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 var currentProfile by remember { mutableStateOf<LocalProfile?>(null) }
                 var screenState by remember { mutableStateOf("splash") }
-                var showAR by remember { mutableStateOf(false) }
-                var arTitle by remember { mutableStateOf("") }
 
-                val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
-
-                // MOTOR DE PERSISTENCIA Y SPLASH
                 LaunchedEffect(Unit) {
-                    permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA))
                     val profiles = db.offerDao().getAllLocalProfiles()
-                    delay(2500) // Pantalla de marca AdsGo
+                    delay(2000)
                     if (profiles.isNotEmpty()) {
                         currentProfile = profiles.first()
                         screenState = "main_app"
                     } else { screenState = "selection" }
                 }
 
-                Scaffold(
-                    topBar = {
-                        if (screenState == "main_app" && currentProfile != null) {
-                            TopAppBar(
-                                title = { Text("ADSGO", fontWeight = FontWeight.Black, color = OrangeAds) },
-                                navigationIcon = {
-                                    Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.AccountCircle, null, tint = DeepBlueAds, Modifier.size(32.dp))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(currentProfile!!.name.take(10), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                },
-                                actions = {
-                                    IconButton(onClick = { screenState = "selection" }) {
-                                        Icon(Icons.Default.SwitchAccount, null, tint = Color.Gray)
-                                    }
-                                },
-                                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-                            )
+                Surface(Modifier.fillMaxSize()) {
+                    when (screenState) {
+                        "splash" -> Box(Modifier.fillMaxSize().background(DeepBlueAds), contentAlignment = Alignment.Center) {
+                            Text("ADSGO", fontSize = 60.sp, fontWeight = FontWeight.Black, color = OrangeAds)
                         }
-                    }
-                ) { padding ->
-                    Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-                        if (showAR) {
-                            ARScreen(arTitle, onOrderSent = { showAR = false }, onBack = { showAR = false })
-                        } else {
-                            when (screenState) {
-                                "splash" -> SplashScreen()
-                                "selection" -> SelectionScreen(
-                                    onRoleSelected = { role -> screenState = "setup_$role" },
-                                    onBack = { if (currentProfile != null) screenState = "main_app" }
+                        "selection" -> Column(Modifier.fillMaxSize().padding(32.dp), Arrangement.Center) {
+                            Text("ADSGO", fontSize = 50.sp, fontWeight = FontWeight.Black, color = OrangeAds)
+                            Spacer(Modifier.height(40.dp))
+                            Button(onClick = { screenState = "setup_CLIENTE" }, Modifier.fillMaxWidth().height(60.dp)) { Text("MODO CLIENTE") }
+                            Spacer(Modifier.height(16.dp))
+                            OutlinedButton(onClick = { screenState = "setup_TIENDA" }, Modifier.fillMaxWidth().height(60.dp)) { Text("MODO COMERCIO") }
+                        }
+                        "setup_CLIENTE", "setup_TIENDA" -> {
+                            ProfileSetup(screenState) { newProf ->
+                                scope.launch {
+                                    db.offerDao().saveLocalProfile(newProf)
+                                    currentProfile = newProf
+                                    screenState = "main_app"
+                                }
+                            }
+                        }
+                        "main_app" -> Scaffold(
+                            topBar = {
+                                TopAppBar(
+                                    title = { Text("ADSGO", fontWeight = FontWeight.Black, color = OrangeAds) },
+                                    navigationIcon = { Icon(Icons.Default.AccountCircle, null, Modifier.padding(8.dp), tint = DeepBlueAds) },
+                                    actions = { Text(currentProfile?.name ?: "", Modifier.padding(end = 16.dp), fontWeight = FontWeight.Bold) }
                                 )
-                                "setup_CLIENTE", "setup_TIENDA" -> {
-                                    val r = if(screenState.contains("CLIENTE")) "CLIENTE" else "TIENDA"
-                                    if (r == "CLIENTE") {
-                                        ClientSetupWindow { scope.launch { db.offerDao().saveLocalProfile(it); currentProfile = it; screenState = "main_app" } }
-                                    } else {
-                                        StoreSetupWindow { scope.launch { db.offerDao().saveLocalProfile(it); currentProfile = it; screenState = "main_app" } }
-                                    }
-                                }
-                                "main_app" -> {
-                                    if (currentProfile?.role == "CLIENTE") {
-                                        ClientScreen(onBack = { screenState = "selection" }, onOpenAR = { arTitle = it; showAR = true })
-                                    } else {
-                                        StoreScreen(currentProfile!!, onBack = { screenState = "selection" })
-                                    }
-                                }
+                            }
+                        ) { p ->
+                            Box(Modifier.padding(p)) {
+                                if (currentProfile?.role == "CLIENTE") ClientScreen(onBack = { screenState = "selection" }, onOpenAR = {})
+                                else StoreScreen(profile = currentProfile!!, onBack = { screenState = "selection" })
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ProfileSetup(roleKey: String, onComplete: (LocalProfile) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    val role = if(roleKey.contains("CLIENTE")) "CLIENTE" else "TIENDA"
+    Column(Modifier.fillMaxSize().padding(32.dp)) {
+        Text("Crear Perfil de $role", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(24.dp))
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre Completo") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email de Contacto") }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.weight(1f))
+        Button(onClick = { onComplete(LocalProfile(role = role, name = name, email = email)) }, Modifier.fillMaxWidth().height(56.dp)) {
+            Text("CONTINUAR")
         }
     }
 }
