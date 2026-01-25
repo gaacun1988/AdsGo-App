@@ -11,7 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext // <--- ESTE IMPORT ARREGLA EL ERROR ROJO
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,7 +72,7 @@ fun StoreHomeView(db: AppDatabase, onNew: () -> Unit, onDetail: (Offer) -> Unit,
             LazyColumn {
                 items(ads) { ad ->
                     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onDetail(ad) }) {
-                        ListItem(headlineContent = { Text(ad.title) }, supportingContent = { Text("Vence: ${ad.getExpirationDate()}") })
+                        ListItem(headlineContent = { Text(ad.title, fontWeight = FontWeight.Bold) }, supportingContent = { Text("Vence: ${ad.getExpirationDate()}") })
                     }
                 }
             }

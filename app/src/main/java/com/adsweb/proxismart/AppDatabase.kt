@@ -18,10 +18,8 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "adsgo_final_engine"
-                )
-                    .fallbackToDestructiveMigration()
-                    .build()
+                    "adsgo_master_db"
+                ).fallbackToDestructiveMigration().build()
                 INSTANCE = instance
                 instance
             }
