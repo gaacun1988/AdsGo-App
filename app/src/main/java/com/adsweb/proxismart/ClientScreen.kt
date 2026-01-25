@@ -32,11 +32,18 @@ import com.google.firebase.firestore.ktx.toObjects
 fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
     val context = LocalContext.current
     val dbCloud = FirebaseFirestore.getInstance()
+    val dbLocal = remember { AppDatabase.getDatabase(context) }
+
     var offers by remember { mutableStateOf<List<Offer>>(emptyList()) }
     var selectedOffer by remember { mutableStateOf<Offer?>(null) }
+    var currentClient by remember { mutableStateOf<LocalProfile?>(null) }
     var tab by remember { mutableIntStateOf(0) }
 
+    // Cargar perfil local y ofertas de la nube
     LaunchedEffect(Unit) {
+        val profiles = dbLocal.offerDao().getAllLocalProfiles()
+        if (profiles.isNotEmpty()) currentClient = profiles.first()
+
         dbCloud.collection("ofertas").get().addOnSuccessListener { result ->
             offers = result.toObjects<Offer>()
         }
@@ -68,16 +75,24 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize().background(Color(0xFFF5F5F5)).padding(16.dp)) {
-                    item { Text("HISTORIAL DE OFERTAS", fontWeight = FontWeight.Black, fontSize = 20.sp) }
+                    item { Text("HISTORIAL ADSGO", fontWeight = FontWeight.Black, fontSize = 20.sp, color = DeepBlueAds) }
                     items(offers) { ad ->
-                        ListItem(headlineContent = { Text(ad.title, fontWeight = FontWeight.Bold) }, supportingContent = { Text("De: ${ad.storeName}") })
+                        ListItem(headlineContent = { Text(ad.title, fontWeight = FontWeight.Bold) }, supportingContent = { Text("Tienda: ${ad.storeName}") })
                         HorizontalDivider()
                     }
                 }
             }
 
+            // BOTÓN VOLVER (A selección de perfiles)
+            Button(
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DeepBlueAds.copy(alpha = 0.8f))
+            ) { Text("SALIR") }
+
+            // FOLLETO DINÁMICO DE PEDIDO
             selectedOffer?.let { offer ->
-                Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(28.dp), elevation = CardDefaults.cardElevation(20.dp)) {
+                Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(20.dp)) {
                     Column(modifier = Modifier.padding(24.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             val logo: Any = if(offer.storeLogo.isNotEmpty()) offer.storeLogo else "https://via.placeholder.com/150"
@@ -85,17 +100,23 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                             Spacer(Modifier.width(16.dp))
                             Text(offer.storeName, fontWeight = FontWeight.Black, fontSize = 22.sp, color = DeepBlueAds)
                         }
-                        Text(offer.title, fontSize = 18.sp)
+                        Text(offer.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Text("$${offer.price}", fontSize = 26.sp, color = OrangeAds, fontWeight = FontWeight.ExtraBold)
 
-                        Button(onClick = { onOpenAR(offer.title) }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("VER EN REALIDAD AUMENTADA") }
+                        Spacer(Modifier.height(16.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { onOpenAR(offer.title) }, modifier = Modifier.weight(1f)) { Text("VER EN AR") }
 
-                        Button(onClick = {
-                            val id = (1000..9999).random()
-                            val msg = "*PEDIDO ADSGO #$id*\nQuiero: ${offer.title}\nTienda: ${offer.storeName}"
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${offer.whatsapp}?text=${Uri.encode(msg)}")))
-                        }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)) {
-                            Text("PEDIR POR WHATSAPP")
+                            Button(
+                                onClick = {
+                                    val id = (1000..9999).random()
+                                    val clientName = currentClient?.name ?: "Cliente AdsGo"
+                                    val msg = "*PEDIDO ADSGO #$id*\n👤 *Cliente:* $clientName\n🛍️ *Quiero:* ${offer.title}\n🏪 *Tienda:* ${offer.storeName}"
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${offer.whatsapp}?text=${Uri.encode(msg)}")))
+                                },
+                                modifier = Modifier.weight(1.2f),
+                                colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
+                            ) { Text("PEDIR POR WA") }
                         }
                         TextButton(onClick = { selectedOffer = null }, modifier = Modifier.fillMaxWidth()) { Text("CERRAR") }
                     }
