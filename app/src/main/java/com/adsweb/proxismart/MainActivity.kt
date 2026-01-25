@@ -2,7 +2,6 @@ package com.adsweb.proxismart
 
 import android.Manifest
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -17,7 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.*
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.adsweb.proxismart.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -27,38 +27,50 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             ProxiSmartTheme {
-                val db = remember { AppDatabase.getDatabase(this) }
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val db = remember { AppDatabase.getDatabase(context) }
                 val scope = rememberCoroutineScope()
-                var profileState by remember { mutableStateOf<LocalProfile?>(null) }
+
+                // --- VARIABLES DE ESTADO ---
+                var currentProfile by remember { mutableStateOf<LocalProfile?>(null) }
                 var screenState by remember { mutableStateOf("splash") }
                 var showAR by remember { mutableStateOf(false) }
                 var arTitle by remember { mutableStateOf("") }
 
                 val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
 
+                // --- MOTOR DE PERSISTENCIA (No borra perfil) ---
                 LaunchedEffect(Unit) {
                     launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA))
-                    profileState = db.offerDao().getLocalProfile()
-                    delay(2500)
-                    screenState = if (profileState == null) "selection" else "main_app"
+                    val profiles = db.offerDao().getAllLocalProfiles()
+                    delay(2000) // Splash profesional
+                    if (profiles.isNotEmpty()) {
+                        currentProfile = profiles.first()
+                        screenState = "main_app"
+                    } else {
+                        screenState = "selection"
+                    }
                 }
 
                 Scaffold(
                     topBar = {
-                        if (screenState == "main_app" && profileState != null) {
+                        if (screenState == "main_app" && currentProfile != null) {
                             CenterAlignedTopAppBar(
                                 title = { Text("ADSGO", fontWeight = FontWeight.Black, color = OrangeAds) },
                                 navigationIcon = {
                                     Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.AccountCircle, null, tint = DeepBlueAds, modifier = Modifier.size(32.dp))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(profileState!!.name.take(12), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Icon(Icons.Default.AccountCircle, null, tint = DeepBlueAds)
+                                        Spacer(Modifier.width(5.dp))
+                                        Text(currentProfile!!.name.take(10), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 },
                                 actions = {
-                                    IconButton(onClick = { screenState = "selection" }) { Icon(Icons.Default.SwitchAccount, null) }
+                                    IconButton(onClick = { screenState = "selection" }) {
+                                        Icon(Icons.Default.SwitchAccount, null)
+                                    }
                                 }
                             )
                         }
@@ -70,16 +82,39 @@ class MainActivity : ComponentActivity() {
                         } else {
                             when (screenState) {
                                 "splash" -> SplashScreen()
-                                "selection" -> SelectionScreen { role -> screenState = "setup_$role" }
-                                "setup_CLIENTE", "setup_TIENDA" -> {
-                                    val r = if(screenState.contains("CLIENTE")) "CLIENTE" else "TIENDA"
-                                    ProfileSetupScreen(r) { newProf ->
-                                        scope.launch { db.offerDao().saveLocalProfile(newProf); profileState = newProf; screenState = "main_app" }
+
+                                "selection" -> SelectionScreen { role ->
+                                    screenState = "setup_$role"
+                                }
+
+                                "setup_CLIENTE" -> ClientSetupWindow { newProf ->
+                                    scope.launch {
+                                        db.offerDao().saveLocalProfile(newProf)
+                                        currentProfile = newProf
+                                        screenState = "main_app"
                                     }
                                 }
+
+                                "setup_TIENDA" -> StoreSetupWindow { newProf ->
+                                    scope.launch {
+                                        db.offerDao().saveLocalProfile(newProf)
+                                        currentProfile = newProf
+                                        screenState = "main_app"
+                                    }
+                                }
+
                                 "main_app" -> {
-                                    if (profileState?.role == "CLIENTE") ClientScreen(onBack = { screenState = "selection" }, onOpenAR = { arTitle = it; showAR = true })
-                                    else StoreScreen(profileState!!, onBack = { screenState = "selection" })
+                                    if (currentProfile?.role == "CLIENTE") {
+                                        ClientScreen(
+                                            onBack = { screenState = "selection" },
+                                            onOpenAR = { arTitle = it; showAR = true }
+                                        )
+                                    } else if (currentProfile != null) {
+                                        StoreScreen(
+                                            profile = currentProfile!!,
+                                            onBack = { screenState = "selection" }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -94,27 +129,14 @@ class MainActivity : ComponentActivity() {
 fun SelectionScreen(onSelected: (String) -> Unit) {
     Column(Modifier.fillMaxSize().padding(32.dp), Arrangement.Center, Alignment.CenterHorizontally) {
         Text("ADSGO", fontSize = 54.sp, fontWeight = FontWeight.Black, color = OrangeAds)
-        Spacer(Modifier.height(40.dp))
-        Button(onClick = { onSelected("CLIENTE") }, Modifier.fillMaxWidth().height(64.dp)) { Text("MODO CLIENTE", fontWeight = FontWeight.Bold) }
+        Text("BUSINESS & SMART SHOPPING", fontSize = 10.sp, color = DeepBlueAds, letterSpacing = 2.sp)
+        Spacer(Modifier.height(50.dp))
+        Button(onClick = { onSelected("CLIENTE") }, Modifier.fillMaxWidth().height(64.dp)) {
+            Text("SOY CLIENTE", fontWeight = FontWeight.Bold)
+        }
         Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = { onSelected("TIENDA") }, Modifier.fillMaxWidth().height(64.dp)) { Text("MODO COMERCIO", fontWeight = FontWeight.Bold) }
-    }
-}
-
-@Composable
-fun ProfileSetupScreen(role: String, onComplete: (LocalProfile) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var extra by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(32.dp)) {
-        Text("Registro ADSGO: $role", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = DeepBlueAds)
-        Spacer(Modifier.height(24.dp))
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre o Local") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = extra, onValueChange = { extra = it }, label = { Text(if(role=="CLIENTE") "Tus gustos" else "Dirección") }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.weight(1f))
-        Button(onClick = { onComplete(LocalProfile(role = role, name = name, email = email, address = if(role=="TIENDA") extra else "", interests = if(role=="CLIENTE") extra else "")) }, Modifier.fillMaxWidth().height(56.dp)) {
-            Text("CREAR PERFIL PERMANENTE")
+        OutlinedButton(onClick = { onSelected("TIENDA") }, Modifier.fillMaxWidth().height(64.dp)) {
+            Text("SOY COMERCIO", fontWeight = FontWeight.Bold)
         }
     }
 }

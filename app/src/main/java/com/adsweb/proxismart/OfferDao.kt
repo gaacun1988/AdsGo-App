@@ -11,7 +11,7 @@ interface OfferDao {
     suspend fun getAllLocalProfiles(): List<LocalProfile>
 
     @Query("DELETE FROM local_profiles")
-    suspend fun deleteAllProfiles()
+    suspend fun deleteProfile()
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOffer(offer: Offer)

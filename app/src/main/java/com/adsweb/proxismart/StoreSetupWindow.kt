@@ -1,13 +1,10 @@
 package com.adsweb.proxismart
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.adsweb.proxismart.ui.theme.*
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 
@@ -15,48 +12,43 @@ import com.google.maps.android.compose.*
 @Composable
 fun StoreSetupWindow(onComplete: (LocalProfile) -> Unit) {
     var storeName by remember { mutableStateOf("") }
-    var selectedCat by remember { mutableStateOf("Restaurante") }
     var locationPin by remember { mutableStateOf(LatLng(-34.6037, -58.3816)) }
+    var selectedCat by remember { mutableStateOf("Restaurante") }
     var expanded by remember { mutableStateOf(false) }
 
-    val categories = listOf("Verduleria", "Restaurante", "Kiosco", "Ferreteria", "Panaderia", "Farmacia", "Ropa", "Calzado", "Electronica", "Supermercado", "Jugueteria", "Mascotas", "Gimnasio", "Peluqueria", "Libreria", "Joyeria", "Floreria", "Deportes", "Cafeteria", "Carniceria")
+    val cats = listOf("Restaurante", "Verduleria", "Ferretería", "Ropa", "Farmacia")
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())) {
-        Text("Perfil de Comercio", style = MaterialTheme.typography.headlineMedium, color = DeepBlueAds)
+    Column(Modifier.fillMaxSize().padding(24.dp)) {
+        Text("Configura tu Negocio", style = MaterialTheme.typography.headlineMedium)
 
-        Spacer(Modifier.height(20.dp))
-        OutlinedTextField(value = storeName, onValueChange = { storeName = it }, label = { Text("Nombre de la Tienda") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = storeName, onValueChange = { storeName = it }, label = { Text("Nombre del Local") }, modifier = Modifier.fillMaxWidth())
 
-        // Selector Desplegable de 20 Categorías
-        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }, modifier = Modifier.padding(top = 16.dp)) {
-            OutlinedTextField(value = selectedCat, onValueChange = {}, readOnly = true, label = { Text("Rubro") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+            OutlinedTextField(value = selectedCat, onValueChange = {}, readOnly = true, label = { Text("Rubro") }, modifier = Modifier.menuAnchor().fillMaxWidth(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) })
             ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                categories.forEach { cat ->
-                    DropdownMenuItem(text = { Text(cat) }, onClick = { selectedCat = cat; expanded = false })
-                }
+                cats.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { selectedCat = c; expanded = false }) }
             }
         }
 
-        Text("Fija tu ubicación exacta:", modifier = Modifier.padding(top = 20.dp))
-
-        // Mapa con estado persistente (No saldrá en blanco)
-        val cameraPositionState = rememberCameraPositionState {
-            position = CameraPosition.fromLatLngZoom(locationPin, 15f)
-        }
-
-        Box(modifier = Modifier.height(250.dp).fillMaxWidth().padding(top = 8.dp)) {
+        Box(Modifier.height(300.dp).padding(top = 16.dp)) {
             GoogleMap(
-                modifier = Modifier.fillMaxSize(),
-                cameraPositionState = cameraPositionState,
+                cameraPositionState = rememberCameraPositionState { position = CameraPosition.fromLatLngZoom(locationPin, 15f) },
                 onMapClick = { locationPin = it }
-            ) {
-                Marker(state = MarkerState(position = locationPin), title = "Mi Tienda")
-            }
+            ) { Marker(MarkerState(locationPin)) }
         }
 
         Button(
-            onClick = { onComplete(LocalProfile(rol = "TIENDA", nombre = storeName, email = "", categoria = selectedCat, lat = locationPin.latitude, lng = locationPin.longitude)) },
-            modifier = Modifier.fillMaxWidth().padding(top = 30.dp).height(56.dp)
+            onClick = {
+                // LLAMADA CORREGIDA
+                onComplete(LocalProfile(
+                    role = "TIENDA",
+                    name = storeName,
+                    category = selectedCat,
+                    lat = locationPin.latitude,
+                    lng = locationPin.longitude
+                ))
+            },
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp).height(56.dp)
         ) {
             Text("GUARDAR MI COMERCIO")
         }
