@@ -27,93 +27,73 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
         setContent {
             ProxiSmartTheme {
-                val context = androidx.compose.ui.platform.LocalContext.current
-                val db = remember { AppDatabase.getDatabase(context) }
+                val db = remember { AppDatabase.getDatabase(this) }
                 val scope = rememberCoroutineScope()
-
-                // --- VARIABLES DE ESTADO ---
                 var currentProfile by remember { mutableStateOf<LocalProfile?>(null) }
                 var screenState by remember { mutableStateOf("splash") }
                 var showAR by remember { mutableStateOf(false) }
                 var arTitle by remember { mutableStateOf("") }
 
-                val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+                val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
 
-                // --- MOTOR DE PERSISTENCIA (No borra perfil) ---
+                // MOTOR DE PERSISTENCIA Y SPLASH
                 LaunchedEffect(Unit) {
-                    launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA))
+                    permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA))
                     val profiles = db.offerDao().getAllLocalProfiles()
-                    delay(2000) // Splash profesional
+                    delay(2500) // Pantalla de marca AdsGo
                     if (profiles.isNotEmpty()) {
                         currentProfile = profiles.first()
                         screenState = "main_app"
-                    } else {
-                        screenState = "selection"
-                    }
+                    } else { screenState = "selection" }
                 }
 
                 Scaffold(
                     topBar = {
                         if (screenState == "main_app" && currentProfile != null) {
-                            CenterAlignedTopAppBar(
+                            TopAppBar(
                                 title = { Text("ADSGO", fontWeight = FontWeight.Black, color = OrangeAds) },
                                 navigationIcon = {
                                     Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.AccountCircle, null, tint = DeepBlueAds)
-                                        Spacer(Modifier.width(5.dp))
+                                        Icon(Icons.Default.AccountCircle, null, tint = DeepBlueAds, Modifier.size(32.dp))
+                                        Spacer(Modifier.width(8.dp))
                                         Text(currentProfile!!.name.take(10), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 },
                                 actions = {
                                     IconButton(onClick = { screenState = "selection" }) {
-                                        Icon(Icons.Default.SwitchAccount, null)
+                                        Icon(Icons.Default.SwitchAccount, null, tint = Color.Gray)
                                     }
-                                }
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
                             )
                         }
                     }
-                ) { p ->
-                    Box(Modifier.padding(p).fillMaxSize()) {
+                ) { padding ->
+                    Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                         if (showAR) {
                             ARScreen(arTitle, onOrderSent = { showAR = false }, onBack = { showAR = false })
                         } else {
                             when (screenState) {
                                 "splash" -> SplashScreen()
-
-                                "selection" -> SelectionScreen { role ->
-                                    screenState = "setup_$role"
-                                }
-
-                                "setup_CLIENTE" -> ClientSetupWindow { newProf ->
-                                    scope.launch {
-                                        db.offerDao().saveLocalProfile(newProf)
-                                        currentProfile = newProf
-                                        screenState = "main_app"
+                                "selection" -> SelectionScreen(
+                                    onRoleSelected = { role -> screenState = "setup_$role" },
+                                    onBack = { if (currentProfile != null) screenState = "main_app" }
+                                )
+                                "setup_CLIENTE", "setup_TIENDA" -> {
+                                    val r = if(screenState.contains("CLIENTE")) "CLIENTE" else "TIENDA"
+                                    if (r == "CLIENTE") {
+                                        ClientSetupWindow { scope.launch { db.offerDao().saveLocalProfile(it); currentProfile = it; screenState = "main_app" } }
+                                    } else {
+                                        StoreSetupWindow { scope.launch { db.offerDao().saveLocalProfile(it); currentProfile = it; screenState = "main_app" } }
                                     }
                                 }
-
-                                "setup_TIENDA" -> StoreSetupWindow { newProf ->
-                                    scope.launch {
-                                        db.offerDao().saveLocalProfile(newProf)
-                                        currentProfile = newProf
-                                        screenState = "main_app"
-                                    }
-                                }
-
                                 "main_app" -> {
                                     if (currentProfile?.role == "CLIENTE") {
-                                        ClientScreen(
-                                            onBack = { screenState = "selection" },
-                                            onOpenAR = { arTitle = it; showAR = true }
-                                        )
-                                    } else if (currentProfile != null) {
-                                        StoreScreen(
-                                            profile = currentProfile!!,
-                                            onBack = { screenState = "selection" }
-                                        )
+                                        ClientScreen(onBack = { screenState = "selection" }, onOpenAR = { arTitle = it; showAR = true })
+                                    } else {
+                                        StoreScreen(currentProfile!!, onBack = { screenState = "selection" })
                                     }
                                 }
                             }
@@ -121,22 +101,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun SelectionScreen(onSelected: (String) -> Unit) {
-    Column(Modifier.fillMaxSize().padding(32.dp), Arrangement.Center, Alignment.CenterHorizontally) {
-        Text("ADSGO", fontSize = 54.sp, fontWeight = FontWeight.Black, color = OrangeAds)
-        Text("BUSINESS & SMART SHOPPING", fontSize = 10.sp, color = DeepBlueAds, letterSpacing = 2.sp)
-        Spacer(Modifier.height(50.dp))
-        Button(onClick = { onSelected("CLIENTE") }, Modifier.fillMaxWidth().height(64.dp)) {
-            Text("SOY CLIENTE", fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = { onSelected("TIENDA") }, Modifier.fillMaxWidth().height(64.dp)) {
-            Text("SOY COMERCIO", fontWeight = FontWeight.Bold)
         }
     }
 }
