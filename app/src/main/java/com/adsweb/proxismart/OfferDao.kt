@@ -4,8 +4,6 @@ import androidx.room.*
 
 @Dao
 interface OfferDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun saveLocalProfile(profile: LocalProfile)
 
     @Query("SELECT * FROM local_profiles ORDER BY id DESC")
     suspend fun getAllLocalProfiles(): List<LocalProfile>

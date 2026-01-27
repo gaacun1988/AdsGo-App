@@ -90,14 +90,50 @@ class MainActivity : ComponentActivity() {
                         ARScreen(arTitle, onOrderSent = { showAR = false }, onBack = { showAR = false })
                     } else {
                         when (screenState) {
-                            "splash" -> SplashScreenLayout()
-                            "selection" -> SelectionLayout { screenState = "setup_$it" }
                             "setup_CLIENTE", "setup_TIENDA" -> {
-                                ProfileSetupLayout(screenState) { newProf ->
-                                    scope.launch {
-                                        db.offerDao().saveLocalProfile(newProf)
-                                        currentProfile = newProf
-                                        screenState = "main_app"
+                                if (isLoading) {
+                                    // Mientras carga, mostramos el splash azul o un spinner
+                                    SplashScreenLayout()
+                                } else {
+                                    // Ahora le pedimos nombre, email y rubroId al formulario
+                                    ProfileSetupLayout(stateKey = screenState) { name, email, rubroId ->
+                                        isLoading = true
+                                        scope.launch {
+                                            val role = if(screenState.contains("CLIENTE")) "CLIENTE" else "TIENDA"
+
+                                            // 1. REGISTRAMOS EN LA NUBE (NEON/HASURA)
+                                            // Usamos AdsGoNetwork para obtener un ID real de la base de datos
+                                            val cloudResult = AdsGoNetwork.registerStoreWithProfile(
+                                                email = email,
+                                                storeName = name,
+                                                idCategory = rubroId,
+                                                lat = -12.0463, // Placeholder de Lima, luego pondremos el GPS real
+                                                lng = -77.0427
+                                            )
+
+                                            cloudResult.onSuccess { cloudUuid ->
+                                                // 2. SI LA NUBE RESPONDE OK, GUARDAMOS EN EL CELULAR (ROOM)
+                                                val newProfile = LocalProfile(
+                                                    id_perfil = cloudUuid, // Guardamos el ID que nos dio Hasura
+                                                    name = name,
+                                                    email = email,
+                                                    role = role,
+                                                    category = rubroId.toString(),
+                                                    isLogged = true
+                                                )
+
+                                                // IMPORTANTE: Usamos localProfileDao(), no offerDao()
+                                                db.localProfileDao().insertProfile(newProfile)
+
+                                                currentProfile = newProfile
+                                                screenState = "main_app"
+                                            }.onFailure {
+                                                // Si falla el internet o la nube, podrías mostrar un aviso aquí
+                                                println("Error en Registro Nube: ${it.message}")
+                                            }
+
+                                            isLoading = false
+                                        }
                                     }
                                 }
                             }
@@ -154,19 +190,64 @@ fun SelectionLayout(onSelect: (String) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileSetupLayout(stateKey: String, onComplete: (LocalProfile) -> Unit) {
+fun ProfileSetupLayout(stateKey: String, onComplete: (String, String, Int) -> Unit) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+
+    // Lista de rubros para el selector
+    val rubros = listOf(
+        "Gastronomía" to 1, "Moda" to 2, "Salud" to 3, "Belleza" to 4,
+        "Bodega/Súper" to 5, "Deportes" to 6, "Tecnología" to 12
+    ) // Agrega los demás aquí...
+
+    var selectedRubroName by remember { mutableStateOf(rubros[0].first) }
+    var selectedRubroId by remember { mutableStateOf(rubros[0].second) }
+
     val role = if(stateKey.contains("CLIENTE")) "CLIENTE" else "TIENDA"
+
     Column(Modifier.fillMaxSize().padding(32.dp)) {
-        Text("Perfil $role", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = DeepBlueAds)
+        Text("Registro de $role", fontSize = 26.sp, fontWeight = FontWeight.Black, color = DeepBlueAds)
         Spacer(Modifier.height(24.dp))
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre Completo") }, modifier = Modifier.fillMaxWidth())
+
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre del comercio") }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(12.dp))
         OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email (BI ADSGO)") }, modifier = Modifier.fillMaxWidth())
+
+        if (role == "TIENDA") {
+            Spacer(Modifier.height(20.dp))
+            Text("Categoría del Negocio:", fontWeight = FontWeight.Bold, color = DeepBlueAds)
+
+            // Selector simple de Rubro
+            Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(selectedRubroName)
+                }
+                androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    rubros.forEach { (nombre, id) ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(nombre) },
+                            onClick = {
+                                selectedRubroName = nombre
+                                selectedRubroId = id
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.weight(1f))
-        Button(onClick = { onComplete(LocalProfile(role = role, name = name, email = email)) }, Modifier.fillMaxWidth().height(60.dp), colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)) {
-            Text("GUARDAR PERMANENTE")
+
+        Button(
+            onClick = { if(name.isNotBlank() && email.isNotBlank()) onComplete(name, email, selectedRubroId) },
+            Modifier.fillMaxWidth().height(60.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
+        ) {
+            Text("VINCULAR CON ADSGO CLOUD")
         }
     }
 }

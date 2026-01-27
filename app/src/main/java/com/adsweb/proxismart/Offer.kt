@@ -5,21 +5,6 @@ import androidx.room.PrimaryKey
 import java.text.SimpleDateFormat
 import java.util.*
 
-@Entity(tableName = "local_profiles")
-data class LocalProfile(
-    @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val role: String = "",
-    val name: String = "",
-    val email: String = "",
-    val address: String = "",
-    val interests: String = "", // Para clientes: "Moda, Tecnología"
-    val category: String = "",  // Para tiendas
-    val subCategory: String = "",
-    val lat: Double = 0.0,
-    val lng: Double = 0.0,
-    val isPremium: Boolean = false,
-    val premiumToken: String = ""
-)
 
 @Entity(tableName = "offers_table")
 data class Offer(

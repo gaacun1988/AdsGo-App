@@ -7,7 +7,10 @@ import androidx.room.RoomDatabase
 
 @Database(entities = [Offer::class, LocalProfile::class], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
+
     abstract fun offerDao(): OfferDao
+    // AGREGA ESTO: Sin el DAO de perfil, no podemos guardar la sesión
+    abstract fun localProfileDao(): LocalProfileDao
 
     companion object {
         @Volatile
@@ -18,7 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "adsgo_final_engine_v8" // Nombre nuevo para limpiar errores de columna
+                    "adsgo_final_engine_v8"
                 )
                     .fallbackToDestructiveMigration()
                     .build()
