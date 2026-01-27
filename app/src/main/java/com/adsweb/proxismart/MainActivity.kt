@@ -1,6 +1,7 @@
 package com.adsweb.proxismart
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,42 +12,29 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -60,16 +48,35 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var fusedLocationClient: com.google.android.gms.location.FusedLocationProviderClient
+
+    @SuppressLint("MissingPermission")
+    private fun obtenerUbicacionActual(onLocationReady: (Double, Double) -> Unit) {
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                onLocationReady(location.latitude, location.longitude)
+            } else {
+                onLocationReady(-12.0463, -77.0427) // Fallback Lima
+            }
+        }.addOnFailureListener {
+            onLocationReady(-12.0463, -77.0427)
+        }
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(this)
         enableEdgeToEdge()
+
         setContent {
             ProxiSmartTheme {
                 val db = remember { AppDatabase.getDatabase(this) }
                 val scope = rememberCoroutineScope()
                 var currentProfile by remember { mutableStateOf<LocalProfile?>(null) }
                 var screenState by remember { mutableStateOf("splash") }
+                var isLoading by remember { mutableStateOf(false) } // <--- Corregido: Variable faltante
                 var showAR by remember { mutableStateOf(false) }
                 var arTitle by remember { mutableStateOf("") }
 
@@ -77,12 +84,15 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA))
-                    val saved = db.offerDao().getAllLocalProfiles()
+                    // Corregido: Usamos localProfileDao en vez de offerDao
+                    val saved = db.localProfileDao().getActiveProfile()
                     delay(2000)
-                    if (saved.isNotEmpty()) {
-                        currentProfile = saved.first()
+                    if (saved != null) {
+                        currentProfile = saved
                         screenState = "main_app"
-                    } else { screenState = "selection" }
+                    } else {
+                        screenState = "selection"
+                    }
                 }
 
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -90,53 +100,52 @@ class MainActivity : ComponentActivity() {
                         ARScreen(arTitle, onOrderSent = { showAR = false }, onBack = { showAR = false })
                     } else {
                         when (screenState) {
+                            "splash" -> SplashScreenLayout()
+
+                            "selection" -> SelectionLayout { screenState = "setup_$it" }
+
                             "setup_CLIENTE", "setup_TIENDA" -> {
                                 if (isLoading) {
-                                    // Mientras carga, mostramos el splash azul o un spinner
                                     SplashScreenLayout()
                                 } else {
-                                    // Ahora le pedimos nombre, email y rubroId al formulario
                                     ProfileSetupLayout(stateKey = screenState) { name, email, rubroId ->
                                         isLoading = true
-                                        scope.launch {
-                                            val role = if(screenState.contains("CLIENTE")) "CLIENTE" else "TIENDA"
+                                        obtenerUbicacionActual { latReal, lngReal ->
+                                            scope.launch {
+                                                val role = if (screenState.contains("CLIENTE")) "CLIENTE" else "TIENDA"
 
-                                            // 1. REGISTRAMOS EN LA NUBE (NEON/HASURA)
-                                            // Usamos AdsGoNetwork para obtener un ID real de la base de datos
-                                            val cloudResult = AdsGoNetwork.registerStoreWithProfile(
-                                                email = email,
-                                                storeName = name,
-                                                idCategory = rubroId,
-                                                lat = -12.0463, // Placeholder de Lima, luego pondremos el GPS real
-                                                lng = -77.0427
-                                            )
-
-                                            cloudResult.onSuccess { cloudUuid ->
-                                                // 2. SI LA NUBE RESPONDE OK, GUARDAMOS EN EL CELULAR (ROOM)
-                                                val newProfile = LocalProfile(
-                                                    id_perfil = cloudUuid, // Guardamos el ID que nos dio Hasura
-                                                    name = name,
+                                                val cloudResult = AdsGoNetwork.registerStoreWithProfile(
                                                     email = email,
-                                                    role = role,
-                                                    category = rubroId.toString(),
-                                                    isLogged = true
+                                                    storeName = name,
+                                                    idCategory = rubroId,
+                                                    lat = latReal,
+                                                    lng = lngReal
                                                 )
 
-                                                // IMPORTANTE: Usamos localProfileDao(), no offerDao()
-                                                db.localProfileDao().insertProfile(newProfile)
-
-                                                currentProfile = newProfile
-                                                screenState = "main_app"
-                                            }.onFailure {
-                                                // Si falla el internet o la nube, podrías mostrar un aviso aquí
-                                                println("Error en Registro Nube: ${it.message}")
+                                                cloudResult.onSuccess { cloudUuid ->
+                                                    val newProfile = LocalProfile(
+                                                        id_perfil = cloudUuid,
+                                                        name = name,
+                                                        email = email,
+                                                        role = role,
+                                                        category = rubroId.toString(),
+                                                        lat = latReal,
+                                                        lng = lngReal,
+                                                        isLogged = true
+                                                    )
+                                                    db.localProfileDao().insertProfile(newProfile)
+                                                    currentProfile = newProfile
+                                                    screenState = "main_app"
+                                                }.onFailure { error ->
+                                                    println("Error en nube: ${error.message}")
+                                                }
+                                                isLoading = false
                                             }
-
-                                            isLoading = false
                                         }
                                     }
                                 }
                             }
+
                             "main_app" -> Scaffold(
                                 topBar = {
                                     TopAppBar(
@@ -153,8 +162,11 @@ class MainActivity : ComponentActivity() {
                                 }
                             ) { padding ->
                                 Box(modifier = Modifier.padding(padding)) {
-                                    if (currentProfile?.role == "CLIENTE") ClientScreen(onBack = { screenState = "selection" }, onOpenAR = { arTitle = it; showAR = true })
-                                    else StoreScreen(profile = currentProfile!!, onBack = { screenState = "selection" })
+                                    if (currentProfile?.role == "CLIENTE") {
+                                        ClientScreen(onBack = { screenState = "selection" }, onOpenAR = { arTitle = it; showAR = true })
+                                    } else {
+                                        StoreScreen(profile = currentProfile!!, onBack = { screenState = "selection" })
+                                    }
                                 }
                             }
                         }
@@ -197,15 +209,13 @@ fun ProfileSetupLayout(stateKey: String, onComplete: (String, String, Int) -> Un
     var email by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
 
-    // Lista de rubros para el selector
     val rubros = listOf(
         "Gastronomía" to 1, "Moda" to 2, "Salud" to 3, "Belleza" to 4,
         "Bodega/Súper" to 5, "Deportes" to 6, "Tecnología" to 12
-    ) // Agrega los demás aquí...
+    )
 
     var selectedRubroName by remember { mutableStateOf(rubros[0].first) }
     var selectedRubroId by remember { mutableStateOf(rubros[0].second) }
-
     val role = if(stateKey.contains("CLIENTE")) "CLIENTE" else "TIENDA"
 
     Column(Modifier.fillMaxSize().padding(32.dp)) {
@@ -220,7 +230,6 @@ fun ProfileSetupLayout(stateKey: String, onComplete: (String, String, Int) -> Un
             Spacer(Modifier.height(20.dp))
             Text("Categoría del Negocio:", fontWeight = FontWeight.Bold, color = DeepBlueAds)
 
-            // Selector simple de Rubro
             Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(selectedRubroName)
@@ -239,7 +248,11 @@ fun ProfileSetupLayout(stateKey: String, onComplete: (String, String, Int) -> Un
                 }
             }
         }
-
+        fun generarAdsId(): String {
+            // Tomamos los últimos 4 caracteres del ID de perfil para el ADS-XXXX
+            val suffix = id_perfil.takeLast(4).uppercase()
+            return "ADS-$suffix"
+        }
         Spacer(Modifier.weight(1f))
 
         Button(

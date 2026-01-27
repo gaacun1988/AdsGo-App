@@ -24,93 +24,191 @@ import coil.compose.AsyncImage
 import com.adsweb.proxismart.ui.theme.*
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ktx.toObjects
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
     val context = LocalContext.current
-    val dbCloud = FirebaseFirestore.getInstance()
+    val scope = rememberCoroutineScope()
     val dbLocal = remember { AppDatabase.getDatabase(context) }
 
-    var offers by remember { mutableStateOf<List<Offer>>(emptyList()) }
-    var selectedOffer by remember { mutableStateOf<Offer?>(null) }
+    // ESTADOS DEL RADAR
+    var storesNearBy by remember { mutableStateOf<List<RemoteStore>>(emptyList()) }
+    var selectedStore by remember { mutableStateOf<RemoteStore?>(null) }
     var currentClient by remember { mutableStateOf<LocalProfile?>(null) }
+    var userLocation by remember { mutableStateOf(LatLng(-12.0463, -77.0427)) } // Default
     var tab by remember { mutableIntStateOf(0) }
+    var isLoading by remember { mutableStateOf(true) }
 
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(userLocation, 16f)
+    }
+
+    // --- CEREBRO DEL RADAR: Captura ubicación y busca en PostGIS ---
     LaunchedEffect(Unit) {
-        val profiles = dbLocal.offerDao().getAllLocalProfiles()
-        if (profiles.isNotEmpty()) currentClient = profiles.first()
+        // 1. Obtener perfil del cliente (v8 engine)
+        currentClient = dbLocal.localProfileDao().getActiveProfile()
 
-        dbCloud.collection("ofertas").get().addOnSuccessListener { result ->
-            offers = result.toObjects<Offer>()
+        // 2. Simular/Obtener ubicación actual para el radar
+        // En una implementación final, aquí usaríamos FusedLocationProvider
+        val lat = currentClient?.lat ?: -12.0463
+        val lng = currentClient?.lng ?: -77.0427
+        userLocation = LatLng(lat, lng)
+        cameraPositionState.position = CameraPosition.fromLatLngZoom(userLocation, 16f)
+
+        // 3. Consulta a Neon.tech vía Ktor
+        AdsGoNetwork.fetchNearbyStores(lat, lng).onSuccess { stores ->
+            storesNearBy = stores
         }
+        isLoading = false
     }
 
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = DeepBlueAds) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Icons.Default.LocationOn, null, tint = Color.White) }, label = { Text("Radar") })
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Icons.Default.History, null, tint = Color.White) }, label = { Text("Historial") })
+                NavigationBarItem(
+                    selected = tab == 0,
+                    onClick = { tab = 0 },
+                    icon = { Icon(Icons.Default.Radar, null, tint = Color.White) },
+                    label = { Text("Radar", color = Color.White) }
+                )
+                NavigationBarItem(
+                    selected = tab == 1,
+                    onClick = { tab = 1 },
+                    icon = { Icon(Icons.Default.History, null, tint = Color.White) },
+                    label = { Text("Cerca", color = Color.White) }
+                )
             }
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             if (tab == 0) {
+                // --- MAPA DEL RADAR ---
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
-                    cameraPositionState = rememberCameraPositionState { position = CameraPosition.fromLatLngZoom(LatLng(-34.6037, -58.3816), 15f) }
+                    cameraPositionState = cameraPositionState,
+                    uiSettings = MapUiSettings(zoomControlsEnabled = false)
                 ) {
-                    offers.forEach { offer ->
+                    // Círculo visual del Radar (Alcance Básico 100m)
+                    Circle(
+                        center = userLocation,
+                        radius = 150.0,
+                        fillColor = OrangeAds.copy(alpha = 0.1f),
+                        strokeColor = OrangeAds,
+                        strokeWidth = 2f
+                    )
+
+                    // Marcador del Usuario
+                    Marker(
+                        state = MarkerState(position = userLocation),
+                        title = "Tu Ubicación",
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
+                    )
+
+                    // Tiendas detectadas por ST_DWithin
+                    storesNearBy.forEach { store ->
+                        // Extraer LatLng del formato GeoJSON que envía PostGIS
+                        val storeLatLng = parseGeoJson(store.ubicacion)
+
                         Marker(
-                            state = MarkerState(position = LatLng(offer.latitude, offer.longitude)),
-                            title = offer.storeName,
-                            // AQUI SE USA EL isPremium YA DEFINIDO EN OFFER.KT
-                            icon = if (offer.isPremium) BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
-                            else BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
-                            onClick = { selectedOffer = offer; true }
+                            state = MarkerState(position = storeLatLng),
+                            title = store.nombre,
+                            snippet = store.categoria,
+                            icon = if (store.id_plan > 1)
+                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE) // Premium
+                            else
+                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE), // Básico
+                            onClick = {
+                                selectedStore = store
+                                true
+                            }
                         )
                     }
                 }
             } else {
+                // LISTA TIPO HISTORIAL
                 LazyColumn(Modifier.fillMaxSize().background(Color(0xFFF5F5F5)).padding(16.dp)) {
-                    item { Text("HISTORIAL DE OFERTAS", fontWeight = FontWeight.Black, fontSize = 20.sp) }
-                    items(offers) { ad ->
-                        ListItem(headlineContent = { Text(ad.title, fontWeight = FontWeight.Bold) }, supportingContent = { Text("De: ${ad.storeName}") })
+                    item { Text("LOCALES EN TU RADIO", fontWeight = FontWeight.Black, fontSize = 20.sp, color = DeepBlueAds) }
+                    items(storesNearBy) { store ->
+                        ListItem(
+                            headlineContent = { Text(store.nombre, fontWeight = FontWeight.Bold) },
+                            supportingContent = { Text(store.categoria) },
+                            trailingContent = {
+                                if(store.id_plan > 1) Icon(Icons.Default.WorkspacePremium, null, tint = OrangeAds)
+                            }
+                        )
                         HorizontalDivider()
                     }
                 }
             }
 
-            selectedOffer?.let { offer ->
-                Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(20.dp)) {
-                    Column(modifier = Modifier.padding(24.dp)) {
+            // CARGANDO...
+            if (isLoading) {
+                CircularProgressIndicator(Modifier.align(Alignment.Center), color = OrangeAds)
+            }
+
+            // DETALLE DEL LOCAL SELECCIONADO (FOLLETO)
+            selectedStore?.let { store ->
+                Card(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    elevation = CardDefaults.cardElevation(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            // CARGA DE LOGO SEGURA USANDO storeLogo DEFINIDO EN OFFER.KT
-                            val logo: Any = if(offer.storeLogo.isNotEmpty()) offer.storeLogo else "https://via.placeholder.com/150"
-                            AsyncImage(model = logo, contentDescription = null, modifier = Modifier.size(50.dp).clip(CircleShape).background(Color.LightGray), contentScale = ContentScale.Crop)
-                            Spacer(Modifier.width(16.dp))
-                            Text(offer.storeName, fontWeight = FontWeight.Black, fontSize = 20.sp, color = DeepBlueAds)
+                            Box(Modifier.size(45.dp).clip(CircleShape).background(OrangeAds), contentAlignment = Alignment.Center) {
+                                Text(store.nombre.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(store.nombre, fontWeight = FontWeight.Black, fontSize = 18.sp, color = DeepBlueAds)
+                                Text(store.categoria, fontSize = 12.sp, color = Color.Gray)
+                            }
                         }
-                        Text(offer.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("$${offer.price}", fontSize = 26.sp, color = OrangeAds, fontWeight = FontWeight.ExtraBold)
+
+                        Spacer(Modifier.height(16.dp))
+                        Text("¡Hola! Esta tienda tiene una oferta para ti.", fontSize = 14.sp)
 
                         Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { onOpenAR(offer.title) }, modifier = Modifier.weight(1f)) { Text("VER EN AR") }
-
-                            Button(onClick = {
-                                val id = (1000..9999).random()
-                                val msg = "*PEDIDO ADSGO #$id*\nQuiero: ${offer.title}\nDe: ${currentClient?.name ?: "Cliente"}"
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${offer.whatsapp}?text=${Uri.encode(msg)}")))
-                            },
-                                modifier = Modifier.weight(1.3f), colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
-                            ) { Text("PEDIR POR WA") }
+                            Button(
+                                onClick = {
+                                    // Generación de ID ÚNICO ADS-XXXX
+                                    val adsId = "ADS-${store.id.toString().padStart(4, '0')}"
+                                    val msg = "Hola ${store.nombre}, vi tu local en el radar ADSGO ($adsId). Me gustaría más info."
+                                    // Aquí el correo se usa como placeholder de teléfono o link WA
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/5491100000000?text=${Uri.encode(msg)}")))
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
+                            ) {
+                                // Cambia Icons.Default.WhatsApp por Icons.Default.Send
+                                Icon(Icons.Default.Send, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("PEDIR")
+                            }
                         }
-                        TextButton(onClick = { selectedOffer = null }, modifier = Modifier.fillMaxWidth()) { Text("CERRAR") }
+                        TextButton(onClick = { selectedStore = null }, modifier = Modifier.fillMaxWidth()) { Text("VOLVER AL MAPA") }
                     }
                 }
             }
         }
+    }
+}
+
+// Helper para convertir la respuesta de PostGIS a LatLng
+private fun parseGeoJson(geoJson: String): LatLng {
+    return try {
+        // Formato simple esperado: "POINT(lng lat)" o JSON
+        // Esto dependerá de cómo lo envíe tu Hasura (GeoJSON o Text)
+        if (geoJson.contains("[")) {
+            val coords = geoJson.substringAfter("[").substringBefore("]").split(",")
+            LatLng(coords[1].toDouble(), coords[0].toDouble())
+        } else {
+            // Fallback si es formato POINT(lng lat)
+            val parts = geoJson.replace("POINT(", "").replace(")", "").split(" ")
+            LatLng(parts[1].toDouble(), parts[0].toDouble())
+        }
+    } catch (e: Exception) {
+        LatLng(-34.6037, -58.3816)
     }
 }
