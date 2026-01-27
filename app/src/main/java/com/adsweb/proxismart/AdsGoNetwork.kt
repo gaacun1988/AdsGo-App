@@ -57,6 +57,41 @@ object AdsGoNetwork {
             json(Json { ignoreUnknownKeys = true; prettyPrint = true })
         }
     }
+    suspend fun insertOfferOnCloud(offer: Offer, idPerfil: String): Result<Int> {
+        // Mutation adaptada a tu PostGIS y la tabla offers_table
+        val mutation = """
+        mutation MyMutation {
+          insert_offers_table_one(object: {
+            title: "${offer.title}",
+            price: "${offer.price}",
+            category: "${offer.category}",
+            subCategory: "${offer.subCategory}",
+            whatsapp: "${offer.whatsapp}",
+            location: {
+              type: "Point",
+              coordinates: [${offer.longitude}, ${offer.latitude}]
+            },
+            radius: ${offer.radius},
+            storeName: "${offer.storeName}",
+            id_perfil: "$idPerfil"
+          }) {
+            id
+          }
+        }
+    """.trimIndent()
+
+        return try {
+            val response: RegisterResponse = httpClient.post(ENDPOINT) {
+                hasuraAuth()
+                setBody(GraphQLRequest(query = mutation))
+            }.body()
+
+            // Asumiendo que reutilizamos la clase de respuesta o creamos una similar
+            Result.success(1) // Éxito
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
     suspend fun fetchNearbyStores(lat: Double, lng: Double): Result<List<RemoteStore>> {
         val query = """
         query GetNearbyStores {
