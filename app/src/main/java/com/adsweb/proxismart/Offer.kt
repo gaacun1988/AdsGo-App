@@ -11,28 +11,38 @@ data class LocalProfile(
     val role: String = "",
     val name: String = "",
     val email: String = "",
+    val address: String = "",
+    val interests: String = "", // Para clientes: "Moda, Tecnología"
+    val category: String = "",  // Para tiendas
+    val subCategory: String = "",
     val lat: Double = 0.0,
-    val lng: Double = 0.0
+    val lng: Double = 0.0,
+    val isPremium: Boolean = false,
+    val premiumToken: String = ""
 )
 
 @Entity(tableName = "offers_table")
 data class Offer(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val storeName: String = "",
+    val storeLogo: String = "",
     val title: String = "",
     val price: String = "",
     val category: String = "",
     val subCategory: String = "",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
+    val isPremium: Boolean = false,
     val radius: Float = 100f,
     val whatsapp: String = "",
-    val views: Int = 0,
-    val clicks: Int = 0,
-    val creationTime: Long = System.currentTimeMillis()
+    val paymentLink: String = "",
+    val views: Int = (10..150).random(),
+    val clicks: Int = (1..15).random(),
+    val creationTime: Long = System.currentTimeMillis(),
+    val durationHours: Int = 24
 ) {
     fun getExpirationDate(): String {
         val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-        return sdf.format(Date(creationTime + (24 * 3600000L)))
+        return sdf.format(Date(creationTime + (durationHours * 3600000L)))
     }
 }

@@ -10,6 +10,9 @@ interface OfferDao {
     @Query("SELECT * FROM local_profiles ORDER BY id DESC")
     suspend fun getAllLocalProfiles(): List<LocalProfile>
 
+    @Query("DELETE FROM local_profiles")
+    suspend fun deleteProfile()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOffer(offer: Offer)
 

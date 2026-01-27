@@ -1,12 +1,16 @@
 package com.adsweb.proxismart
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.tasks.Tasks
-import io.github.jan.supabase.postgrest.postgrest
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -15,37 +19,46 @@ class RadarWorker(val context: Context, workerParams: WorkerParameters) :
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            // 1. Obtener el cliente de ubicación
-            val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+            // VERIFICACIÓN DE PERMISOS (Fixes the warning)
+            val hasLocation = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
 
-            // 2. Obtener la última ubicación conocida (Sincrónico para el Worker)
-            val locationTask = fusedLocationClient.lastLocation
-            val location = Tasks.await(locationTask)
+            if (!hasLocation) {
+                Log.e("ADSGO", "Radar falló: No hay permisos de ubicación")
+                return@withContext Result.failure()
+            }
+
+            val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+            val location = Tasks.await(fusedLocationClient.lastLocation)
 
             if (location != null) {
-                val lat = location.latitude
-                val lng = location.longitude
-
-                // 3. Consultar Supabase (Llamada a la lógica ST_DWithin de tu PDF)
-                // Usamos Postgrest para buscar en la tabla de notificaciones vigentes
-                val response = SupabaseManager.client.postgrest["notificacion_geo"]
-                    .select {
-                        filter {
-                            // Aquí es donde entra tu query de cercanía
-                            // Nota: Para una query compleja como ST_DWithin lo ideal es usar una RPC
-                            Log.d("AdsGoRadar", "Buscando ofertas para: $lat, $lng")
-                        }
+                // LLAMADA AL SAAS
+                val response: HttpResponse = AdsGoNetwork.httpClient.post(AdsGoNetwork.ENDPOINT) {
+                    // Import the extension from our new object
+                    with(AdsGoNetwork) {
+                        hasuraAuth()
                     }
 
-                // 4. Si hay ofertas cerca, podríamos disparar una notificación local
-                Log.d("AdsGoRadar", "Radar ejecutado exitosamente")
-                Result.success()
+                    // Sending the coordinates as JSON body
+                    setBody(mapOf(
+                        "lat" to location.latitude,
+                        "lng" to location.longitude
+                    ))
+                }
+
+                if (response.status.value in 200..299) {
+                    Log.d("ADSGO", "Radar procesado: ${response.status}")
+                    Result.success()
+                } else {
+                    Log.e("ADSGO", "Error de servidor: ${response.status}")
+                    Result.retry()
+                }
             } else {
-                Log.e("AdsGoRadar", "No se pudo obtener la ubicación actual")
                 Result.retry()
             }
         } catch (e: Exception) {
-            Log.e("AdsGoRadar", "Error en el radar: ${e.message}")
+            Log.e("ADSGO", "Radar falló: ${e.message}")
             Result.failure()
         }
     }

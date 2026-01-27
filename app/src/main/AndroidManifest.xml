@@ -1,18 +1,36 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.CAMERA" />
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Permisos corregidos y sin duplicados -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Solución al error de hardware y AR -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" />
+
 
     <application
         android:label="ADSGO"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@style/Theme.ProxiSmart">
+        android:theme="@style/Theme.ProxiSmart"
+        android:allowBackup="true"
+        android:supportsRtl="true">
 
+        <!-- CORRECCIÓN CLAVE AQUÍ:
+             El name DEBE ser "com.google.android.geo.API_KEY" -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="TU_API_KEY_AQUÍ" />
+            android:value="AIzaSyCLUOPnP9du9njkFGokkEzCGj3yhMnToDE" />
 
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

@@ -5,8 +5,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.google.android.gms.maps.model.*
-import com.google.maps.android.compose.*
+// CHANGE: Remove the wildcard import and use specific ones
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.CameraPosition
+// Ensure this specific Marker is imported if not using wildcard
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.rememberCameraPositionState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,7 +40,7 @@ fun StoreSetupWindow(onComplete: (LocalProfile) -> Unit) {
             GoogleMap(
                 cameraPositionState = rememberCameraPositionState { position = CameraPosition.fromLatLngZoom(locationPin, 15f) },
                 onMapClick = { locationPin = it }
-            ) { Marker(MarkerState(locationPin)) }
+            ) { Marker(state=MarkerState(locationPin)) }
         }
 
         Button(

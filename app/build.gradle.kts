@@ -3,7 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.kapt)
-    alias(libs.plugins.google.services)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.google.services)// <--- ESTA LÍNEA
 }
 
 android {
@@ -19,60 +20,57 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-        }
+    buildFeatures {
+        compose = true
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+    kapt {
+        arguments {
+            arg("konvert.jvmTarget", "17")
+        }
+    }
 }
 
 dependencies {
-    // Core & Background
+    // 1. Android Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.firebase.firestore)
 
-    // UI AdsGo Engine
+    // 2. Compose Engine (Nombres corregidos a DOTS)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.graphics)
     implementation(libs.compose.material3)
+    implementation(libs.compose.icons)
     implementation(libs.compose.foundation)
     implementation(libs.compose.layout)
-    implementation(libs.compose.tooling.preview)
-    implementation(libs.compose.icons.extended)
 
-    // Maps & Proximity
+    // 3. ADSGO Maps & GPS (Punto 13 del PDF)
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
-    implementation(libs.google.maps.compose)
+    implementation(libs.maps.compose)
 
-    // Database (Offline-First)
+    // 4. ADSGO Data Engine (Persistencia y Red)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     kapt(libs.room.compiler)
-
-    // Backend, SaaS & Network
-    implementation(libs.firebase.firestore)
     implementation(libs.ktor.android)
     implementation(libs.ktor.json)
-    implementation(libs.ktor.negotiation)
-    implementation(libs.coil.kt)
+    implementation(libs.ktor.content.negotiation)
+    implementation(libs.coil.compose)
     implementation(libs.guava.android)
-
-    // AR Camera Vision
-    implementation(libs.camera.core)
-    implementation(libs.camera.lifecycle)
-    implementation(libs.camera.view)
-
-    debugImplementation(libs.compose.tooling.debug)
-    debugImplementation(libs.compose.test.manifest)
+    // camerax
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 }

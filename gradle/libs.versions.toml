@@ -7,15 +7,15 @@ activity = "1.9.2"
 composeBom = "2024.09.02"
 googleMaps = "19.0.0"
 mapsCompose = "4.4.1"
-location = "21.3.0"
+playLocation = "21.3.0"
 room = "2.6.1"
 coil = "2.5.0"
 firestore = "25.1.1"
-camerax = "1.3.4"
 work = "2.9.1"
 guava = "33.0.0-android"
 ktor = "2.3.11"
 googleServices = "4.4.2"
+camerax = "1.3.4"
 
 [libraries]
 # Android Core
@@ -24,40 +24,33 @@ androidx-lifecycle-runtime = { group = "androidx.lifecycle", name = "lifecycle-r
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity" }
 androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
-# Compose UI
+# Compose Engine
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
-compose-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
-compose-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+compose-icons = { group = "androidx.compose.material", name = "material-icons-extended" }
 compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 compose-layout = { group = "androidx.compose.foundation", name = "foundation-layout" }
-compose-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-compose-tooling-debug = { group = "androidx.compose.ui", name = "ui-tooling" }
-compose-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 
-# Google Services y Maps
+# AdsGo Engine (Mapas y Red)
 play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "googleMaps" }
-play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "location" }
-google-maps-compose = { group = "com.google.maps.android", name = "maps-compose", version.ref = "mapsCompose" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playLocation" }
+maps-compose = { group = "com.google.maps.android", name = "maps-compose", version.ref = "mapsCompose" }
+ktor-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
+ktor-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
 
-# Base de Datos
+# DB y Media
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
-
-# Network y Herramientas (Ktor, Firebase, Coil)
-firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firestore" }
-coil-kt = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 guava-android = { group = "com.google.guava", name = "guava", version.ref = "guava" }
-ktor-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
-ktor-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
-ktor-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
-
-# CameraX
-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore-ktx", version.ref = "firestore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -65,3 +58,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

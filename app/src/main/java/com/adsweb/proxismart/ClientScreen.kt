@@ -39,7 +39,6 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
     var currentClient by remember { mutableStateOf<LocalProfile?>(null) }
     var tab by remember { mutableIntStateOf(0) }
 
-    // Cargar perfil local y ofertas de la nube
     LaunchedEffect(Unit) {
         val profiles = dbLocal.offerDao().getAllLocalProfiles()
         if (profiles.isNotEmpty()) currentClient = profiles.first()
@@ -52,8 +51,8 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = DeepBlueAds) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Icons.Default.LocationOn, null, tint = Color.White) }, label = { Text("Radar", color = Color.White) })
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Icons.Default.History, null, tint = Color.White) }, label = { Text("Historial", color = Color.White) })
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Icons.Default.LocationOn, null, tint = Color.White) }, label = { Text("Radar") })
+                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Icons.Default.History, null, tint = Color.White) }, label = { Text("Historial") })
             }
         }
     ) { padding ->
@@ -67,6 +66,7 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                         Marker(
                             state = MarkerState(position = LatLng(offer.latitude, offer.longitude)),
                             title = offer.storeName,
+                            // AQUI SE USA EL isPremium YA DEFINIDO EN OFFER.KT
                             icon = if (offer.isPremium) BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
                             else BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
                             onClick = { selectedOffer = offer; true }
@@ -74,48 +74,37 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                     }
                 }
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize().background(Color(0xFFF5F5F5)).padding(16.dp)) {
-                    item { Text("HISTORIAL ADSGO", fontWeight = FontWeight.Black, fontSize = 20.sp, color = DeepBlueAds) }
+                LazyColumn(Modifier.fillMaxSize().background(Color(0xFFF5F5F5)).padding(16.dp)) {
+                    item { Text("HISTORIAL DE OFERTAS", fontWeight = FontWeight.Black, fontSize = 20.sp) }
                     items(offers) { ad ->
-                        ListItem(headlineContent = { Text(ad.title, fontWeight = FontWeight.Bold) }, supportingContent = { Text("Tienda: ${ad.storeName}") })
+                        ListItem(headlineContent = { Text(ad.title, fontWeight = FontWeight.Bold) }, supportingContent = { Text("De: ${ad.storeName}") })
                         HorizontalDivider()
                     }
                 }
             }
 
-            // BOTÓN VOLVER (A selección de perfiles)
-            Button(
-                onClick = onBack,
-                modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DeepBlueAds.copy(alpha = 0.8f))
-            ) { Text("SALIR") }
-
-            // FOLLETO DINÁMICO DE PEDIDO
             selectedOffer?.let { offer ->
                 Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(20.dp)) {
                     Column(modifier = Modifier.padding(24.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            // CARGA DE LOGO SEGURA USANDO storeLogo DEFINIDO EN OFFER.KT
                             val logo: Any = if(offer.storeLogo.isNotEmpty()) offer.storeLogo else "https://via.placeholder.com/150"
-                            AsyncImage(model = logo, contentDescription = null, modifier = Modifier.size(60.dp).clip(CircleShape).background(Color.LightGray), contentScale = ContentScale.Crop)
+                            AsyncImage(model = logo, contentDescription = null, modifier = Modifier.size(50.dp).clip(CircleShape).background(Color.LightGray), contentScale = ContentScale.Crop)
                             Spacer(Modifier.width(16.dp))
-                            Text(offer.storeName, fontWeight = FontWeight.Black, fontSize = 22.sp, color = DeepBlueAds)
+                            Text(offer.storeName, fontWeight = FontWeight.Black, fontSize = 20.sp, color = DeepBlueAds)
                         }
                         Text(offer.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Text("$${offer.price}", fontSize = 26.sp, color = OrangeAds, fontWeight = FontWeight.ExtraBold)
 
-                        Spacer(Modifier.height(16.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { onOpenAR(offer.title) }, modifier = Modifier.weight(1f)) { Text("VER EN AR") }
 
-                            Button(
-                                onClick = {
-                                    val id = (1000..9999).random()
-                                    val clientName = currentClient?.name ?: "Cliente AdsGo"
-                                    val msg = "*PEDIDO ADSGO #$id*\n👤 *Cliente:* $clientName\n🛍️ *Quiero:* ${offer.title}\n🏪 *Tienda:* ${offer.storeName}"
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${offer.whatsapp}?text=${Uri.encode(msg)}")))
-                                },
-                                modifier = Modifier.weight(1.2f),
-                                colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
+                            Button(onClick = {
+                                val id = (1000..9999).random()
+                                val msg = "*PEDIDO ADSGO #$id*\nQuiero: ${offer.title}\nDe: ${currentClient?.name ?: "Cliente"}"
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${offer.whatsapp}?text=${Uri.encode(msg)}")))
+                            },
+                                modifier = Modifier.weight(1.3f), colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
                             ) { Text("PEDIR POR WA") }
                         }
                         TextButton(onClick = { selectedOffer = null }, modifier = Modifier.fillMaxWidth()) { Text("CERRAR") }
