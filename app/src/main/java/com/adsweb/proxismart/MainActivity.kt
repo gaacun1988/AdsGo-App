@@ -9,36 +9,18 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adsweb.proxismart.ui.theme.DeepBlueAds
@@ -57,10 +39,10 @@ class MainActivity : ComponentActivity() {
             if (location != null) {
                 onLocationReady(location.latitude, location.longitude)
             } else {
-                onLocationReady(-12.0463, -77.0427) // Fallback Lima
+                onLocationReady(-34.6037, -58.3816) // Fallback CABA
             }
         }.addOnFailureListener {
-            onLocationReady(-12.0463, -77.0427)
+            onLocationReady(-34.6037, -58.3816)
         }
     }
 
@@ -76,7 +58,7 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 var currentProfile by remember { mutableStateOf<LocalProfile?>(null) }
                 var screenState by remember { mutableStateOf("splash") }
-                var isLoading by remember { mutableStateOf(false) } // <--- Corregido: Variable faltante
+                var isLoading by remember { mutableStateOf(false) }
                 var showAR by remember { mutableStateOf(false) }
                 var arTitle by remember { mutableStateOf("") }
 
@@ -84,7 +66,6 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA))
-                    // Corregido: Usamos localProfileDao en vez de offerDao
                     val saved = db.localProfileDao().getActiveProfile()
                     delay(2000)
                     if (saved != null) {
@@ -108,18 +89,20 @@ class MainActivity : ComponentActivity() {
                                 if (isLoading) {
                                     SplashScreenLayout()
                                 } else {
-                                    ProfileSetupLayout(stateKey = screenState) { name, email, rubroId ->
+                                    ProfileSetupLayout(stateKey = screenState) { name, email, phone, rubroId ->
                                         isLoading = true
                                         obtenerUbicacionActual { latReal, lngReal ->
                                             scope.launch {
                                                 val role = if (screenState.contains("CLIENTE")) "CLIENTE" else "TIENDA"
 
+                                                // Registrar en la nube
                                                 val cloudResult = AdsGoNetwork.registerStoreWithProfile(
                                                     email = email,
                                                     storeName = name,
                                                     idCategory = rubroId,
                                                     lat = latReal,
                                                     lng = lngReal
+                                                    // Nota: Tu función de red debe estar preparada para recibir el phone también
                                                 )
 
                                                 cloudResult.onSuccess { cloudUuid ->
@@ -127,6 +110,7 @@ class MainActivity : ComponentActivity() {
                                                         id_perfil = cloudUuid,
                                                         name = name,
                                                         email = email,
+                                                        phone = phone, // Se guarda el WhatsApp capturado
                                                         role = role,
                                                         category = rubroId.toString(),
                                                         lat = latReal,
@@ -202,65 +186,42 @@ fun SelectionLayout(onSelect: (String) -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileSetupLayout(stateKey: String, onComplete: (String, String, Int) -> Unit) {
+fun ProfileSetupLayout(stateKey: String, onComplete: (String, String, String, Int) -> Unit) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
+    var phone by remember { mutableStateOf("") }
 
-    val rubros = listOf(
-        "Gastronomía" to 1, "Moda" to 2, "Salud" to 3, "Belleza" to 4,
-        "Bodega/Súper" to 5, "Deportes" to 6, "Tecnología" to 12
-    )
-
-    var selectedRubroName by remember { mutableStateOf(rubros[0].first) }
-    var selectedRubroId by remember { mutableStateOf(rubros[0].second) }
     val role = if(stateKey.contains("CLIENTE")) "CLIENTE" else "TIENDA"
 
     Column(Modifier.fillMaxSize().padding(32.dp)) {
-        Text("Registro de $role", fontSize = 26.sp, fontWeight = FontWeight.Black, color = DeepBlueAds)
+        Text("Perfil $role", fontSize = 28.sp, fontWeight = FontWeight.Black, color = DeepBlueAds)
+
         Spacer(Modifier.height(24.dp))
 
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre del comercio") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre Completo") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email (BI ADSGO)") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email (Opcional)") }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(12.dp))
 
-        if (role == "TIENDA") {
-            Spacer(Modifier.height(20.dp))
-            Text("Categoría del Negocio:", fontWeight = FontWeight.Bold, color = DeepBlueAds)
+        OutlinedTextField(
+            value = phone,
+            onValueChange = { phone = it },
+            label = { Text("WhatsApp (Ej: 54911...)") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+        )
 
-            Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(selectedRubroName)
-                }
-                androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    rubros.forEach { (nombre, id) ->
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text(nombre) },
-                            onClick = {
-                                selectedRubroName = nombre
-                                selectedRubroId = id
-                                expanded = false
-                            }
-                        )
-                    }
-                }
-            }
-        }
-        fun generarAdsId(): String {
-            // Tomamos los últimos 4 caracteres del ID de perfil para el ADS-XXXX
-            val suffix = id_perfil.takeLast(4).uppercase()
-            return "ADS-$suffix"
-        }
         Spacer(Modifier.weight(1f))
 
         Button(
-            onClick = { if(name.isNotBlank() && email.isNotBlank()) onComplete(name, email, selectedRubroId) },
+            onClick = {
+                if(name.isNotBlank() && phone.isNotBlank()) onComplete(name, email, phone, 1)
+            },
             Modifier.fillMaxWidth().height(60.dp),
             colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
         ) {
-            Text("VINCULAR CON ADSGO CLOUD")
+            Text("ACTIVAR MI RADAR", fontWeight = FontWeight.Bold)
         }
     }
 }

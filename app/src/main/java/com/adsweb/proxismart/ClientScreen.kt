@@ -20,11 +20,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.adsweb.proxismart.ui.theme.*
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
-import kotlinx.coroutines.launch
 
 @Composable
 fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
@@ -36,7 +34,7 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
     var storesNearBy by remember { mutableStateOf<List<RemoteStore>>(emptyList()) }
     var selectedStore by remember { mutableStateOf<RemoteStore?>(null) }
     var currentClient by remember { mutableStateOf<LocalProfile?>(null) }
-    var userLocation by remember { mutableStateOf(LatLng(-12.0463, -77.0427)) } // Default
+    var userLocation by remember { mutableStateOf(LatLng(-34.6037, -58.3816)) } // Fallback CABA
     var tab by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
 
@@ -44,19 +42,13 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
         position = CameraPosition.fromLatLngZoom(userLocation, 16f)
     }
 
-    // --- CEREBRO DEL RADAR: Captura ubicación y busca en PostGIS ---
     LaunchedEffect(Unit) {
-        // 1. Obtener perfil del cliente (v8 engine)
         currentClient = dbLocal.localProfileDao().getActiveProfile()
-
-        // 2. Simular/Obtener ubicación actual para el radar
-        // En una implementación final, aquí usaríamos FusedLocationProvider
-        val lat = currentClient?.lat ?: -12.0463
-        val lng = currentClient?.lng ?: -77.0427
+        val lat = currentClient?.lat ?: -34.6037
+        val lng = currentClient?.lng ?: -58.3816
         userLocation = LatLng(lat, lng)
         cameraPositionState.position = CameraPosition.fromLatLngZoom(userLocation, 16f)
 
-        // 3. Consulta a Neon.tech vía Ktor
         AdsGoNetwork.fetchNearbyStores(lat, lng).onSuccess { stores ->
             storesNearBy = stores
         }
@@ -75,7 +67,7 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                 NavigationBarItem(
                     selected = tab == 1,
                     onClick = { tab = 1 },
-                    icon = { Icon(Icons.Default.History, null, tint = Color.White) },
+                    icon = { Icon(Icons.Default.Storefront, null, tint = Color.White) },
                     label = { Text("Cerca", color = Color.White) }
                 )
             }
@@ -83,41 +75,35 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             if (tab == 0) {
-                // --- MAPA DEL RADAR ---
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
                     uiSettings = MapUiSettings(zoomControlsEnabled = false)
                 ) {
-                    // Círculo visual del Radar (Alcance Básico 100m)
                     Circle(
                         center = userLocation,
-                        radius = 150.0,
+                        radius = 200.0,
                         fillColor = OrangeAds.copy(alpha = 0.1f),
                         strokeColor = OrangeAds,
                         strokeWidth = 2f
                     )
 
-                    // Marcador del Usuario
                     Marker(
                         state = MarkerState(position = userLocation),
                         title = "Tu Ubicación",
                         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
                     )
 
-                    // Tiendas detectadas por ST_DWithin
                     storesNearBy.forEach { store ->
-                        // Extraer LatLng del formato GeoJSON que envía PostGIS
                         val storeLatLng = parseGeoJson(store.ubicacion)
-
                         Marker(
                             state = MarkerState(position = storeLatLng),
                             title = store.nombre,
                             snippet = store.categoria,
                             icon = if (store.id_plan > 1)
-                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE) // Premium
+                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
                             else
-                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE), // Básico
+                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
                             onClick = {
                                 selectedStore = store
                                 true
@@ -126,7 +112,6 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                     }
                 }
             } else {
-                // LISTA TIPO HISTORIAL
                 LazyColumn(Modifier.fillMaxSize().background(Color(0xFFF5F5F5)).padding(16.dp)) {
                     item { Text("LOCALES EN TU RADIO", fontWeight = FontWeight.Black, fontSize = 20.sp, color = DeepBlueAds) }
                     items(storesNearBy) { store ->
@@ -142,12 +127,10 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                 }
             }
 
-            // CARGANDO...
             if (isLoading) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center), color = OrangeAds)
             }
 
-            // DETALLE DEL LOCAL SELECCIONADO (FOLLETO)
             selectedStore?.let { store ->
                 Card(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
@@ -167,27 +150,26 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                         }
 
                         Spacer(Modifier.height(16.dp))
-                        Text("¡Hola! Esta tienda tiene una oferta para ti.", fontSize = 14.sp)
+                        Text("Esta tienda tiene una oportunidad cerca tuyo.", fontSize = 14.sp)
 
                         Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = {
-                                    // Generación de ID ÚNICO ADS-XXXX
                                     val adsId = "ADS-${store.id.toString().padStart(4, '0')}"
-                                    val msg = "Hola ${store.nombre}, vi tu local en el radar ADSGO ($adsId). Me gustaría más info."
-                                    // Aquí el correo se usa como placeholder de teléfono o link WA
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/5491100000000?text=${Uri.encode(msg)}")))
+                                    val msg = "Hola ${store.nombre}, vi tu local en el radar ADSGO ($adsId) y quería hacer un pedido."
+                                    val tiendaPhone = store.whatsapp.ifEmpty { "5491100000000" } // Fallback
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$tiendaPhone?text=${Uri.encode(msg)}"))
+                                    context.startActivity(intent)
                                 },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = OrangeAds)
                             ) {
-                                // Cambia Icons.Default.WhatsApp por Icons.Default.Send
                                 Icon(Icons.Default.Send, null, Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("PEDIR")
+                                Text("CONSULTAR")
                             }
                         }
-                        TextButton(onClick = { selectedStore = null }, modifier = Modifier.fillMaxWidth()) { Text("VOLVER AL MAPA") }
+                        TextButton(onClick = { selectedStore = null }, modifier = Modifier.fillMaxWidth()) { Text("CERRAR") }
                     }
                 }
             }
@@ -195,16 +177,12 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
     }
 }
 
-// Helper para convertir la respuesta de PostGIS a LatLng
 private fun parseGeoJson(geoJson: String): LatLng {
     return try {
-        // Formato simple esperado: "POINT(lng lat)" o JSON
-        // Esto dependerá de cómo lo envíe tu Hasura (GeoJSON o Text)
         if (geoJson.contains("[")) {
             val coords = geoJson.substringAfter("[").substringBefore("]").split(",")
             LatLng(coords[1].toDouble(), coords[0].toDouble())
         } else {
-            // Fallback si es formato POINT(lng lat)
             val parts = geoJson.replace("POINT(", "").replace(")", "").split(" ")
             LatLng(parts[1].toDouble(), parts[0].toDouble())
         }

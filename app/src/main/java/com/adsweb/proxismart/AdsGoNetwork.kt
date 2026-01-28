@@ -46,7 +46,8 @@ data class RemoteStore(
     val nombre: String,
     val categoria: String,
     val id_plan: Int,
-    val ubicacion: String // Formato GeoJSON que devuelve PostGIS
+    val ubicacion: String,
+    val whatsapp: String = "" // Formato GeoJSON que devuelve PostGIS
 )
 object AdsGoNetwork {
     const val ENDPOINT = "https://relaxed-joey-16.hasura.app/v1/graphql"
@@ -106,6 +107,7 @@ object AdsGoNetwork {
             categoria
             id_plan
             ubicacion
+            whatsapp
           }
         }
     """.trimIndent()

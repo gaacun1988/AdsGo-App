@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [Offer::class, LocalProfile::class], version = 8, exportSchema = false)
+@Database(entities = [Offer::class, LocalProfile::class], version = 9, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun offerDao(): OfferDao
@@ -21,7 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "adsgo_final_engine_v8"
+                    "adsgo_final_engine_v9"
                 )
                     .fallbackToDestructiveMigration()
                     .build()

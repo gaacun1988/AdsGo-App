@@ -8,6 +8,7 @@ data class LocalProfile(
     @PrimaryKey val id_perfil: String, // Usaremos el UUID que nos de Hasura como llave primaria
     val role: String = "",         // "TIENDA" o "CLIENTE"
     val name: String = "",
+    val phone: String = "",
     val email: String = "",
     val address: String = "",
     val category: String = "",     // El rubro comercial (ej: "Restaurantes")
