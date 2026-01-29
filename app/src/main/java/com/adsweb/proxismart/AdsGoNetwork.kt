@@ -10,7 +10,8 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-// MODELOS DE DATOS
+// --- MODELOS DE DATOS ---
+
 @Serializable
 data class GraphQLRequest(val query: String)
 
@@ -36,10 +37,13 @@ data class TiendaStats(
     val is_premium: Boolean = false,
     val radius: Int = 100
 )
+
 @Serializable
 data class NearbyStoresResponse(val data: NearbyStoresData? = null)
+
 @Serializable
 data class NearbyStoresData(val tienda: List<RemoteStore>)
+
 @Serializable
 data class RemoteStore(
     val id: Int,
@@ -47,83 +51,28 @@ data class RemoteStore(
     val categoria: String,
     val id_plan: Int,
     val ubicacion: String,
-    val whatsapp: String = "" // Formato GeoJSON que devuelve PostGIS
+    val whatsapp: String = ""
 )
+
 object AdsGoNetwork {
     const val ENDPOINT = "https://relaxed-joey-16.hasura.app/v1/graphql"
     private const val ADMIN_SECRET = "4ynayEjBkblp0p3nzmUPpPTd0FDuzkSYLYdSJGSeG1jpAgWzIZfLsuW9dkXJACca"
 
     val httpClient = HttpClient(Android) {
         install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true; prettyPrint = true })
+            json(Json {
+                ignoreUnknownKeys = true
+                prettyPrint = true
+            })
         }
     }
-    suspend fun insertOfferOnCloud(offer: Offer, idPerfil: String): Result<Int> {
-        // Mutation adaptada a tu PostGIS y la tabla offers_table
-        val mutation = """
-        mutation MyMutation {
-          insert_offers_table_one(object: {
-            title: "${offer.title}",
-            price: "${offer.price}",
-            category: "${offer.category}",
-            subCategory: "${offer.subCategory}",
-            whatsapp: "${offer.whatsapp}",
-            location: {
-              type: "Point",
-              coordinates: [${offer.longitude}, ${offer.latitude}]
-            },
-            radius: ${offer.radius},
-            storeName: "${offer.storeName}",
-            id_perfil: "$idPerfil"
-          }) {
-            id
-          }
-        }
-    """.trimIndent()
 
-        return try {
-            val response: RegisterResponse = httpClient.post(ENDPOINT) {
-                hasuraAuth()
-                setBody(GraphQLRequest(query = mutation))
-            }.body()
-
-            // Asumiendo que reutilizamos la clase de respuesta o creamos una similar
-            Result.success(1) // Éxito
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    suspend fun fetchNearbyStores(lat: Double, lng: Double): Result<List<RemoteStore>> {
-        val query = """
-        query GetNearbyStores {
-          tienda(where: {
-            ubicacion: { _st_d_within: { 
-                distance: 300, 
-                from: { type: "Point", coordinates: [$lng, $lat] } 
-            } }
-          }) {
-            id
-            nombre
-            categoria
-            id_plan
-            ubicacion
-            whatsapp
-          }
-        }
-    """.trimIndent()
-
-        return try {
-            val res: NearbyStoresResponse = httpClient.post(ENDPOINT) {
-                hasuraAuth()
-                setBody(GraphQLRequest(query))
-            }.body()
-            Result.success(res.data?.tienda ?: emptyList())
-        } catch(e: Exception) { Result.failure(e) }
-    }
     private fun HttpRequestBuilder.hasuraAuth() {
         header("x-hasura-admin-secret", ADMIN_SECRET)
         contentType(ContentType.Application.Json)
     }
+
+    // --- FUNCIONES DE COMERCIO ---
 
     suspend fun registerStoreWithProfile(email: String, storeName: String, idCategory: Int, lat: Double, lng: Double): Result<String> {
         val mutation = """
@@ -148,7 +97,35 @@ object AdsGoNetwork {
                 hasuraAuth(); setBody(GraphQLRequest(mutation))
             }.body()
             val id = response.data?.insert_perfil_one?.id_perfil
-            if (id != null) Result.success(id) else Result.failure(Exception("Error"))
+            if (id != null) Result.success(id) else Result.failure(Exception("Error en Registro"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun insertOfferOnCloud(offer: Offer, idPerfil: String): Result<Int> {
+        val mutation = """
+            mutation InsertOffer {
+              insert_offers_table_one(object: {
+                title: "${offer.title}",
+                price: "${offer.price}",
+                category: "${offer.category}",
+                subCategory: "${offer.subCategory}",
+                whatsapp: "${offer.whatsapp}",
+                location: {
+                  type: "Point",
+                  coordinates: [${offer.longitude}, ${offer.latitude}]
+                },
+                radius: ${offer.radius},
+                storeName: "${offer.storeName}",
+                id_perfil: "$idPerfil"
+              }) { id }
+            }
+        """.trimIndent()
+
+        return try {
+            httpClient.post(ENDPOINT) {
+                hasuraAuth(); setBody(GraphQLRequest(query = mutation))
+            }
+            Result.success(1)
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -169,6 +146,42 @@ object AdsGoNetwork {
                 hasuraAuth(); setBody(GraphQLRequest(query))
             }.body()
             Result.success(res.data?.tienda?.firstOrNull() ?: TiendaStats())
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // --- FUNCIONES DE CLIENTE (RADAR) ---
+
+    suspend fun fetchNearbyStores(lat: Double, lng: Double, categoryId: Int? = null): Result<List<RemoteStore>> {
+        val categoryFilter = if (categoryId != null && categoryId != 0) {
+            ", id_tipo_comercio: { _eq: $categoryId }"
+        } else ""
+
+        val query = """
+            query GetFilteredStores {
+              tienda(where: {
+                ubicacion: { _st_d_within: { 
+                    distance: 1000, 
+                    from: { type: "Point", coordinates: [$lng, $lat] } 
+                } }
+                $categoryFilter
+              }) {
+                id
+                nombre
+                categoria
+                id_plan
+                ubicacion
+                whatsapp
+              }
+            }
+        """.trimIndent()
+
+        return try {
+            // CORREGIDO: Usamos NearbyStoresResponse aquí
+            val res: NearbyStoresResponse = httpClient.post(ENDPOINT) {
+                hasuraAuth()
+                setBody(GraphQLRequest(query))
+            }.body()
+            Result.success(res.data?.tienda ?: emptyList())
         } catch (e: Exception) { Result.failure(e) }
     }
 }

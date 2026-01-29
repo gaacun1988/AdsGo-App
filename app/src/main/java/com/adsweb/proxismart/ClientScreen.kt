@@ -7,6 +7,7 @@ import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,32 +28,36 @@ import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class) // Necesario para FilterChip
 @SuppressLint("MissingPermission")
 @Composable
 fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val dbLocal = remember { AppDatabase.getDatabase(context) }
-
-    // --- SERVICIOS DE UBICACIÓN ---
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    // --- ESTADOS ---
+    // --- ESTADOS GLOBALES ---
     var storesNearBy by remember { mutableStateOf<List<RemoteStore>>(emptyList()) }
     var selectedStore by remember { mutableStateOf<RemoteStore?>(null) }
     var userLocation by remember { mutableStateOf(LatLng(-34.6037, -58.3816)) }
+    var selectedCategoryId by remember { mutableStateOf(0) } // 0 = Todas
     var tab by remember { mutableIntStateOf(0) }
-    var isLoading by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    val categories = listOf(
+        "Todos" to 0, "Gastronomía" to 1, "Moda" to 2, "Salud" to 3, "Belleza" to 4,
+        "Almacén" to 5, "Deportes" to 6, "Tecnología" to 12, "Mascotas" to 11
+    )
 
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(userLocation, 16f)
+        position = CameraPosition.fromLatLngZoom(userLocation, 15f)
     }
 
-    // --- 1. LÓGICA DE RADAR EN VIVO (GPS SENSOR) ---
-    // Este bloque detecta si el usuario camina 10 metros y refresca todo
+    // --- LÓGICA DE RADAR (GPS SENSOR + FILTRO) ---
     DisposableEffect(Unit) {
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
-            .setMinUpdateDistanceMeters(10f) // Refrescar cada 10 metros
+            .setMinUpdateDistanceMeters(10f)
             .build()
 
         val locationCallback = object : LocationCallback() {
@@ -61,26 +66,17 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                     val newLatLng = LatLng(location.latitude, location.longitude)
                     userLocation = newLatLng
 
-                    // Solo en el primer fix, movemos la cámara
-                    if (isLoading) {
-                        cameraPositionState.position = CameraPosition.fromLatLngZoom(newLatLng, 16f)
-                    }
-
-                    // BUSCAR EN NEON/HASURA CADA VEZ QUE SE MUEVE
+                    // Sincronizar radar con categoría actual
                     scope.launch {
-                        AdsGoNetwork.fetchNearbyStores(newLatLng.latitude, newLatLng.longitude)
+                        AdsGoNetwork.fetchNearbyStores(newLatLng.latitude, newLatLng.longitude, selectedCategoryId)
                             .onSuccess { storesNearBy = it }
                     }
                 }
                 isLoading = false
             }
         }
-
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
-
-        onDispose {
-            fusedLocationClient.removeLocationUpdates(locationCallback) // Apagar GPS al salir
-        }
+        onDispose { fusedLocationClient.removeLocationUpdates(locationCallback) }
     }
 
     Scaffold(
@@ -89,7 +85,7 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                 NavigationBarItem(
                     selected = tab == 0,
                     onClick = { tab = 0 },
-                    icon = { Icon(Icons.Default.TrackChanges, null, tint = Color.White) }, // Icono de Radar estable
+                    icon = { Icon(Icons.Default.TrackChanges, null, tint = Color.White) },
                     label = { Text("Radar", color = Color.White) }
                 )
                 NavigationBarItem(
@@ -103,13 +99,12 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             if (tab == 0) {
-                // --- MODO MAPA DINÁMICO ---
+                // EL MAPA VA PRIMERO (Fondo)
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
                     uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = true)
                 ) {
-                    // Círculo del Radar: Visualización del radio de detección
                     Circle(
                         center = userLocation,
                         radius = 200.0,
@@ -118,20 +113,13 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                         strokeWidth = 2f
                     )
 
-                    // Marcador del Cliente
-                    Marker(
-                        state = MarkerState(position = userLocation),
-                        title = "Estás aquí",
-                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
-                    )
+                    Marker(state = MarkerState(position = userLocation), title = "Estás aquí")
 
-                    // Tiendas detectadas por ST_DWithin
                     storesNearBy.forEach { store ->
                         val storeLatLng = parseGeoJson(store.ubicacion)
                         Marker(
                             state = MarkerState(position = storeLatLng),
                             title = store.nombre,
-                            snippet = store.categoria,
                             icon = if (store.id_plan > 1)
                                 BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
                             else
@@ -140,24 +128,55 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                         )
                     }
                 }
+
+                // LAS CATEGORÍAS VAN DESPUÉS (Encima del mapa)
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                        .statusBarsPadding(),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(categories) { (nombre, id) ->
+                        FilterChip(
+                            selected = selectedCategoryId == id,
+                            onClick = {
+                                selectedCategoryId = id
+                                scope.launch {
+                                    AdsGoNetwork.fetchNearbyStores(userLocation.latitude, userLocation.longitude, id)
+                                        .onSuccess { storesNearBy = it }
+                                }
+                            },
+                            label = { Text(nombre) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = OrangeAds,
+                                selectedLabelColor = Color.White,
+                                containerColor = Color.White.copy(alpha = 0.9f)
+                            ),
+                            elevation = FilterChipDefaults.filterChipElevation(6.dp)
+                        )
+                    }
+                }
             } else {
-                // --- MODO LISTA DE CERCANÍA ---
+                // MODO LISTA
                 LazyColumn(Modifier.fillMaxSize().background(Color(0xFFF8F9FA)).padding(16.dp)) {
                     item { Text("OFERTAS EN TU RADIO", fontWeight = FontWeight.Black, fontSize = 22.sp, color = DeepBlueAds) }
                     items(storesNearBy) { store ->
                         ListItem(
                             headlineContent = { Text(store.nombre, fontWeight = FontWeight.Bold) },
                             supportingContent = { Text(store.categoria) },
-                            trailingContent = {
-                                if(store.id_plan > 1) Icon(Icons.Default.WorkspacePremium, null, tint = OrangeAds)
-                            }
+                            trailingContent = { if(store.id_plan > 1) Icon(Icons.Default.WorkspacePremium, null, tint = OrangeAds) }
                         )
                         HorizontalDivider()
                     }
                 }
             }
 
-            // --- FOLLETO DINÁMICO ---
+            // CARGANDO...
+            if (isLoading) CircularProgressIndicator(Modifier.align(Alignment.Center), color = OrangeAds)
+
+            // TARJETA DE TIENDA (Encima de todo al seleccionar)
             selectedStore?.let { store ->
                 Card(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
@@ -175,15 +194,11 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                                 Text(store.categoria, color = Color.Gray)
                             }
                         }
-
-                        Spacer(Modifier.height(16.dp))
-                        Text("¡Oportunidad detectada! Pulsa el botón para pedir por WhatsApp.", fontSize = 14.sp)
-
                         Spacer(Modifier.height(20.dp))
                         Button(
                             onClick = {
                                 val adsId = "ADS-${store.id.toString().padStart(4, '0')}"
-                                val msg = "Hola ${store.nombre}, vi tu local en ADSGO ($adsId) y quiero información."
+                                val msg = "Hola ${store.nombre}, vi tu local en ADSGO ($adsId) y quería hacer un pedido."
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${store.whatsapp}?text=${Uri.encode(msg)}"))
                                 context.startActivity(intent)
                             },
@@ -192,7 +207,7 @@ fun ClientScreen(onBack: () -> Unit, onOpenAR: (String) -> Unit) {
                         ) {
                             Icon(Icons.Default.Send, null)
                             Spacer(Modifier.width(8.dp))
-                            Text("CHATEAR CON EL LOCAL", fontWeight = FontWeight.Bold)
+                            Text("CHATEAR POR WHATSAPP")
                         }
                         TextButton(onClick = { selectedStore = null }, modifier = Modifier.fillMaxWidth()) {
                             Text("VOLVER AL MAPA", color = Color.Gray)
@@ -213,7 +228,5 @@ private fun parseGeoJson(geoJson: String): LatLng {
             val parts = geoJson.replace("POINT(", "").replace(")", "").split(" ")
             LatLng(parts[1].toDouble(), parts[0].toDouble())
         }
-    } catch (e: Exception) {
-        LatLng(-34.6037, -58.3816) // Argentina Fallback
-    }
+    } catch (e: Exception) { LatLng(-34.6037, -58.3816) }
 }
